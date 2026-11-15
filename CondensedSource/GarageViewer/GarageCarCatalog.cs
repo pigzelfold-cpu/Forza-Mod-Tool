@@ -49,7 +49,7 @@ public sealed class GarageCarCatalog : IDisposable
             }
             if (!Has("Data_Car", "Id") || !Has("Data_Car", "MediaName") || !Has("Data_Car", "Year") ||
                 !Has("List_UpgradeCarBody", "IsStock")) throw new InvalidDataException("Choose a complete matching GameDB catalog, not a car-only export or profile save.");
-            if (game != ForzaGame.Horizon2 && !Has("Data_Car", "NotAvailableInAutoshow"))
+            if (game != ForzaGame.Horizon2 && game != ForzaGame.Horizon3 && !Has("Data_Car", "NotAvailableInAutoshow"))
                 throw new InvalidDataException("This catalog does not have the supported FH6 schema. Motorsport stock parts must not be added to an FH6 save.");
             if (Read("PRAGMA application_id").Any(r => L(r.Values.First()) == 0x46483643))
                 throw new InvalidDataException("Choose a complete FH6 GameDB, not a sparse car export.");
@@ -96,17 +96,30 @@ public sealed class GarageCarCatalog : IDisposable
 
     public static GarageCarCatalog Embedded(ForzaGame game = ForzaGame.Horizon6)
     {
-        if (game is not (ForzaGame.Horizon2 or ForzaGame.Horizon6)) throw new InvalidDataException("Unsupported garage catalog game.");
+        if (game is not (ForzaGame.Horizon2 or ForzaGame.Horizon3 or ForzaGame.Horizon4 or ForzaGame.Horizon5 or ForzaGame.Horizon6)) throw new InvalidDataException("Unsupported garage catalog game.");
         string path = NewPath();
         try {
-            // Version stamps are opaque IDs, not sortable release numbers. Explicitly
-            // designate the newest verified clean FH6 catalog, retaining older baselines.
-            string resource = game == ForzaGame.Horizon2 ? "FH6LocalCryptoTool.gamedbRC.stock.fh2-2067577858.sqlite.gz" : "FH6LocalCryptoTool.gamedbRC.stock.fh6-n120540163.sqlite.gz";
+            string resource = game switch
+            {
+                ForzaGame.Horizon2 => "FH6LocalCryptoTool.gamedbRC.stock.fh2-2067577858.sqlite.gz",
+                ForzaGame.Horizon3 => "FH6LocalCryptoTool.gamedbRC.stock.fh3-1231512575.sqlite.gz",
+                ForzaGame.Horizon4 => "FH6LocalCryptoTool.gamedbRC.stock.fh4--1558258184.sqlite.gz",
+                ForzaGame.Horizon5 => "FH6LocalCryptoTool.gamedbRC.stock.fh5-830738948.sqlite.gz",
+                _ => "FH6LocalCryptoTool.gamedbRC.stock.fh6-n120540163.sqlite.gz"
+            };
+            string label = game switch
+            {
+                ForzaGame.Horizon2 => "Embedded FH2 catalog (354 models)",
+                ForzaGame.Horizon3 => "Embedded FH3 catalog (542 models; build 1231512575)",
+                ForzaGame.Horizon4 => "Embedded FH4 catalog (783 models; build -1558258184)",
+                ForzaGame.Horizon5 => "Embedded FH5 catalog (933 models; build -830738948)",
+                _ => "Embedded FH6 catalog (691 models; build -120540163)"
+            };
             using var input = Assembly.GetExecutingAssembly().GetManifestResourceStream(resource)
                 ?? throw new InvalidDataException("The embedded car catalog is missing.");
             using var gzip = new GZipStream(input, CompressionMode.Decompress);
             using (var output = new FileStream(path, FileMode.CreateNew)) gzip.CopyTo(output);
-            return new(path, game == ForzaGame.Horizon2 ? "Embedded FH2 catalog (354 models)" : "Embedded FH6 catalog (691 models; build -120540163)", game);
+            return new(path, label, game);
         } catch { Cleanup(path); throw; }
     }
 
@@ -118,7 +131,9 @@ public sealed class GarageCarCatalog : IDisposable
             using (var input = Open(materialized.SqlitePath, SqliteOpenMode.ReadOnly))
             using (var output = Open(path, SqliteOpenMode.ReadWriteCreate)) input.BackupDatabase(output);
             materialized.VerifySourceUnchanged();
-            return new(path, Path.GetFileName(source), source: source) { SourcePath = Path.GetFullPath(source) };
+            var detectedGame = GameDbIdentity.Detect(path);
+            var game = detectedGame != ForzaGame.Unknown ? detectedGame : ForzaGame.Horizon6;
+            return new(path, Path.GetFileName(source), game, source: source) { SourcePath = Path.GetFullPath(source) };
         } catch { Cleanup(path); throw; }
     }
 

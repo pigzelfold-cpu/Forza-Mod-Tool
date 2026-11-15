@@ -2,7 +2,7 @@ DB Browser
 
 Back up your DB. This tab keeps its own working copy.
 
-1. Open an FH2/FH5/FH6 SLT or SQLite database. Decrypt FM8 GameDBs in Crypto first.
+1. Open an FH2, FH3, FH4, FH5, FH6, FM6 Apex or FM7 SLT or any SQLite database directly. Decrypt FM8 GameDBs in Crypto first.
 2. Browse Data: choose a table, then search or filter its rows.
 3. Double-click a cell to edit it. The single-cell editor uses Apply cell.
 4. Write changes keeps your edits in the working copy.

@@ -1,3 +1,36 @@
+# Forza Mod Tool — Community Fork Additions (based on v1.3.0.6)
+
+Changes added on top of upstream v1.3.0.6 in this fork.
+
+## Car Editor: Traffic Cars in Autoshow (FH2 – FH6)
+
+- Added **＋ Traffic cars** and **− Traffic cars** buttons in Car Editor to unlock and revert drivable traffic cars across **FH2, FH3, FH4, FH5, and FH6** via offline GameDB edits (`TrafficCarAutoshowService`).
+- Preserves the free-roam `TrafficCars` table (AI traffic keeps spawning normally) and excludes null/placeholder entries (`1215`, `1477`, `IsNullCar=1`).
+- Updates per-game visibility/drivability flags (`IsDrivable`, `IsPurchased`, `IsInstalled`, `IsUnicorn`, `IsArcade`, `NotAvailableInAutoshow`, `VisibleOnlyIfOwned`, `NotAvailableInAuctionHouse`, and FH2 `ContentId=0`), cleanly removes traffic IDs from `UnobtainableCars` in FH4–FH6 without foreign-key violations or view/backup schema drift, preserves stock `BaseCost`, avoids duplicate `OnDiscContent` rows, and assigns valid child `CarBucket` categories (keeping existing valid buckets such as FH3 `2408`).
+- Enabled single-car and multi-select **Available in Autoshow** toggling for traffic cars (including FH2 traffic cars), **Restore selected car** stock recovery, and full non-destructive revert (**− Traffic cars**) that preserves engine swaps, tuning, and custom prices.
+
+## Multi-Game Expansion (FH3, FH4, FM7, FM6 Apex, FH3 OpusDev)
+
+- Added authenticated TransformIT GameDB decryption and re-encryption (`LegacyGameDb`, `LegacyTfit`, `LegacyKeys`) for **FH3**, **FH4**, **FM7**, and **FM6 Apex** in Car Editor, Crypto, and DB Browser.
+- Added **FH3** path/filename de-obfuscation and re-obfuscation (`Fh3NameCodec`) for `.~b1` / obfuscated install layouts.
+- Packaged embedded stock baselines (`FH3` build `1231512575` with 542 cars; `FH4` build `-1558258184` with 783 cars), per-game localized car display names (`FH3`, `FH4`, `FH5`), `CarBucketCatalog` localized bucket loading, stock thumbnail auto-discovery, and native FH3/FH4 drift steering-angle and whitewall/Edition tire options.
+- Added authenticated legacy asset (`File`, `ConfigFile`, `Profile`, `Reward`, `Photo`, `Dynamic`, `SFS`) and ZIP archive decrypt/re-encrypt workflows (`LegacyAssetContainer`, `LegacyZipArchive`) for **FH3**, **FH3 OpusDev**, **FH4**, **FM7**, and **FM6 Apex**.
+
+## FH5 Profile Editor, Festival Playlist, Garage Viewer & Save Swap
+
+- Unlocked direct **FH5 `ProfileData` editing** and automatic re-encryption in **Profile Editor** (Credits, Total Credits, Driver XP / `/Main/TotalXP`, Skill Points, Wheelspins, Super Wheelspins, and paginated profile database table browsing).
+- Added **FH5 Festival Playlist** completion support (`PlaylistPointsState` / `PlaylistActivityState` / `PlaylistCompletionState` v8 layout with 4-byte IDs and multi-track Mainland, Rally Adventure, Hot Wheels, and Hide & Seek maxima).
+- Updated **Driver XP** editing (`ProfileXpEdit`) to keep `/Main/TotalXP` synchronized with `/Main/XP`, `/Main/TotalSkills`, and `/CompareStats/WristbandLevel`.
+- Extended **Garage Viewer** to load, edit, and export **FH5 `ProfileData`** saves with FH5 stock thumbnail detection alongside FH6 and FH2/Azimuth.
+- Extended **Save Swap** (`MainWindow.SaveSwap`) to support both **FH5 `ProfileData`** and **FH6 `C_ProfileData`** donor → target transfers, with **Find save** (`SaveLocator`) auto-discovery across Steam, MS Store / Xbox (WGS & PGS), OnlineFix, EMPRESS, and RUNE save folders and automatic FH5 profile template matching.
+
+## Car Editor Performance & Engine Upgrade Visibility Fix
+
+- Optimized bulk engine/motor swap batches (`AddEngineSwaps`, `AddMotorSwaps`) by preloading existing IDs, warming manufacturer caches, reusing prepared statements, and building temporary `Ordinal` indexes during batch runs.
+- Added missing Engine-category upgrade generation (`EnsureEngineUpgrades`, `EnsureAllEnginesHaveUpgrades`, **Unlock engine upgrades**) so stock and swapped combustion engines (including affected FH3 cars) expose upgrades in-game.
+
+---
+
 # Forza Mod Tool v1.3.0.6
 
 - Fixed FH6 Collection Journal entries all showing under Drift Attack.

@@ -219,7 +219,7 @@ public static class Fh5ZipArchive
                 throw new InvalidDataException("Unsupported ZIP flags, symlink, descriptor, disk or compression method.");
             string name = ((flags & 0x800) != 0 ? new UTF8Encoding(false, true) : Encoding.GetEncoding(437)).GetString(central, 46, nameLength);
             MotorsportLzxArchive.SafeName(name);
-            if (!names.Add(name.TrimEnd('/')) || new[] { ManifestName, TemplateName, Fh6ZipArchive.ManifestName, MotorsportLzxArchive.ManifestName, MotorsportTrackArchive.ReportName }.Contains(name.Split('/')[0], StringComparer.OrdinalIgnoreCase))
+            if (!names.Add(name.TrimEnd('/')) || new[] { ManifestName, TemplateName, LegacyZipArchive.ManifestName, Fh6ZipArchive.ManifestName, MotorsportLzxArchive.ManifestName, MotorsportTrackArchive.ReportName }.Contains(name.Split('/')[0], StringComparer.OrdinalIgnoreCase))
                 throw new InvalidDataException("ZIP has colliding/reserved workspace paths.");
             if (!name.EndsWith('/')) files.Add(name);
             long packed = U32(central, 20), plain = U32(central, 24), localOffset = U32(central, 42); uint crc = U32(central, 16);
@@ -290,7 +290,7 @@ public static class Fh5ZipArchive
     {
         using var input = Open(Path.Combine(root, ManifestName), 64 * 1024);
         var manifest = JsonSerializer.Deserialize<Manifest>(input) ?? throw new InvalidDataException("Missing ZIP workspace metadata.");
-        if (manifest.Format != Format || string.IsNullOrWhiteSpace(manifest.OriginalName) || Path.GetFileName(manifest.OriginalName) != manifest.OriginalName || !manifest.OriginalName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Invalid ZIP workspace metadata.");
+        if (manifest.Format != Format || string.IsNullOrWhiteSpace(manifest.OriginalName) || Path.GetFileName(manifest.OriginalName) != manifest.OriginalName) throw new InvalidDataException("Invalid ZIP workspace metadata.");
         MotorsportLzxArchive.SafeName(manifest.OriginalName); return manifest;
     }
     static string WorkspaceRoot(string path)

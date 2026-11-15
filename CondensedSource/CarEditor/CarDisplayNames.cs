@@ -8,7 +8,7 @@ namespace FH6CarEditor;
 /// Data_Car/List_CarMake string tables. Presentation only: never writes GameDB or
 /// save identifiers. Unknown/custom MediaNames keep the existing formatter.
 /// </summary>
-static class CarDisplayNames
+public static class CarDisplayNames
 {
     sealed record Entry(long Id, string Name, string Manufacturer, long? Year = null, bool InitialDrive = false);
     static readonly Dictionary<string, Entry> Entries = new(StringComparer.OrdinalIgnoreCase)
@@ -697,17 +697,112 @@ static class CarDisplayNames
         ["ZEN_TSRS_19"] = new(3212, "Zenvo TSR-S", "Zenvo"),
     };
 
-    public static string? Name(string media) =>
-        media != null && Entries.TryGetValue(media, out var entry) ? entry.Name : null;
+    public static string? Name(string media, FH6LocalCryptoTool.ForzaGame game = FH6LocalCryptoTool.ForzaGame.Unknown)
+    {
+        if (media == null) return null;
+        if (game == FH6LocalCryptoTool.ForzaGame.Horizon3)
+        {
+            if (Fh3CarDisplayNames.Entries.TryGetValue(media, out var fh3))
+                return Format(fh3.Name, fh3.Manufacturer);
+        }
+        else if (game == FH6LocalCryptoTool.ForzaGame.Horizon4)
+        {
+            if (Fh4CarDisplayNames.Entries.TryGetValue(media, out var fh4))
+                return Format(fh4.Name, fh4.Manufacturer);
+        }
+        else if (game == FH6LocalCryptoTool.ForzaGame.Horizon5)
+        {
+            if (Fh5CarDisplayNames.Entries.TryGetValue(media, out var fh5))
+                return Format(fh5.Name, fh5.Manufacturer);
+        }
+        else if (game == FH6LocalCryptoTool.ForzaGame.Horizon6)
+        {
+            if (Entries.TryGetValue(media, out var entry)) return entry.Name;
+        }
 
-    internal static string? ApprovedName(long id) =>
-        Entries.Values.FirstOrDefault(entry => entry.Id == id && !entry.InitialDrive)?.Name;
+        // Cascade fallback
+        if (Entries.TryGetValue(media, out var e6)) return e6.Name;
+        if (Fh5CarDisplayNames.Entries.TryGetValue(media, out var e5)) return Format(e5.Name, e5.Manufacturer);
+        if (Fh4CarDisplayNames.Entries.TryGetValue(media, out var e4)) return Format(e4.Name, e4.Manufacturer);
+        if (Fh3CarDisplayNames.Entries.TryGetValue(media, out var e3)) return Format(e3.Name, e3.Manufacturer);
+        return null;
+    }
 
-    public static string Manufacturer(long id, string media, string fallback) =>
-        media != null && Entries.TryGetValue(media, out var entry) && entry.Id == id ? entry.Manufacturer : fallback;
+    public static string? ApprovedName(long id, FH6LocalCryptoTool.ForzaGame game = FH6LocalCryptoTool.ForzaGame.Unknown)
+    {
+        if (game == FH6LocalCryptoTool.ForzaGame.Horizon3)
+        {
+            var fh3 = Fh3CarDisplayNames.Entries.Values.FirstOrDefault(e => e.Id == id);
+            if (fh3 != null) return Format(fh3.Name, fh3.Manufacturer);
+        }
+        else if (game == FH6LocalCryptoTool.ForzaGame.Horizon4)
+        {
+            var fh4 = Fh4CarDisplayNames.Entries.Values.FirstOrDefault(e => e.Id == id);
+            if (fh4 != null) return Format(fh4.Name, fh4.Manufacturer);
+        }
+        else if (game == FH6LocalCryptoTool.ForzaGame.Horizon5)
+        {
+            var fh5 = Fh5CarDisplayNames.Entries.Values.FirstOrDefault(e => e.Id == id);
+            if (fh5 != null) return Format(fh5.Name, fh5.Manufacturer);
+        }
+        else if (game == FH6LocalCryptoTool.ForzaGame.Horizon6)
+        {
+            var entry = Entries.Values.FirstOrDefault(e => e.Id == id && !e.InitialDrive);
+            if (entry != null) return entry.Name;
+        }
 
-    public static long Year(long id, string media, long original) =>
-        media != null && Entries.TryGetValue(media, out var entry) && entry.Id == id ? entry.Year ?? original : original;
+        // Cascade fallback
+        var def6 = Entries.Values.FirstOrDefault(e => e.Id == id && !e.InitialDrive);
+        if (def6 != null) return def6.Name;
+        var def5 = Fh5CarDisplayNames.Entries.Values.FirstOrDefault(e => e.Id == id);
+        if (def5 != null) return Format(def5.Name, def5.Manufacturer);
+        var def4 = Fh4CarDisplayNames.Entries.Values.FirstOrDefault(e => e.Id == id);
+        if (def4 != null) return Format(def4.Name, def4.Manufacturer);
+        var def3 = Fh3CarDisplayNames.Entries.Values.FirstOrDefault(e => e.Id == id);
+        if (def3 != null) return Format(def3.Name, def3.Manufacturer);
+        return null;
+    }
+
+    static string Format(string name, string manufacturer)
+    {
+        return name.StartsWith(manufacturer, StringComparison.OrdinalIgnoreCase)
+            ? name
+            : $"{manufacturer} {name}".Trim();
+    }
+
+    public static string Manufacturer(long id, string media, string fallback, FH6LocalCryptoTool.ForzaGame game = FH6LocalCryptoTool.ForzaGame.Unknown)
+    {
+        if (media != null)
+        {
+            if (game == FH6LocalCryptoTool.ForzaGame.Horizon3 && Fh3CarDisplayNames.Entries.TryGetValue(media, out var e3) && e3.Id == id) return e3.Manufacturer;
+            if (game == FH6LocalCryptoTool.ForzaGame.Horizon4 && Fh4CarDisplayNames.Entries.TryGetValue(media, out var e4) && e4.Id == id) return e4.Manufacturer;
+            if (game == FH6LocalCryptoTool.ForzaGame.Horizon5 && Fh5CarDisplayNames.Entries.TryGetValue(media, out var e5) && e5.Id == id) return e5.Manufacturer;
+            if (game == FH6LocalCryptoTool.ForzaGame.Horizon6 && Entries.TryGetValue(media, out var e6) && e6.Id == id) return e6.Manufacturer;
+
+            if (Entries.TryGetValue(media, out var entry) && entry.Id == id) return entry.Manufacturer;
+            if (Fh5CarDisplayNames.Entries.TryGetValue(media, out var fh5) && fh5.Id == id) return fh5.Manufacturer;
+            if (Fh4CarDisplayNames.Entries.TryGetValue(media, out var fh4) && fh4.Id == id) return fh4.Manufacturer;
+            if (Fh3CarDisplayNames.Entries.TryGetValue(media, out var fh3) && fh3.Id == id) return fh3.Manufacturer;
+        }
+        return fallback;
+    }
+
+    public static long Year(long id, string media, long original, FH6LocalCryptoTool.ForzaGame game = FH6LocalCryptoTool.ForzaGame.Unknown)
+    {
+        if (media != null)
+        {
+            if (game == FH6LocalCryptoTool.ForzaGame.Horizon3 && Fh3CarDisplayNames.Entries.TryGetValue(media, out var e3) && e3.Id == id) return e3.Year;
+            if (game == FH6LocalCryptoTool.ForzaGame.Horizon4 && Fh4CarDisplayNames.Entries.TryGetValue(media, out var e4) && e4.Id == id) return e4.Year;
+            if (game == FH6LocalCryptoTool.ForzaGame.Horizon5 && Fh5CarDisplayNames.Entries.TryGetValue(media, out var e5) && e5.Id == id) return e5.Year;
+            if (game == FH6LocalCryptoTool.ForzaGame.Horizon6 && Entries.TryGetValue(media, out var e6) && e6.Id == id) return e6.Year ?? original;
+
+            if (Entries.TryGetValue(media, out var entry) && entry.Id == id) return entry.Year ?? original;
+            if (Fh5CarDisplayNames.Entries.TryGetValue(media, out var fh5) && fh5.Id == id) return fh5.Year;
+            if (Fh4CarDisplayNames.Entries.TryGetValue(media, out var fh4) && fh4.Id == id) return fh4.Year;
+            if (Fh3CarDisplayNames.Entries.TryGetValue(media, out var fh3) && fh3.Id == id) return fh3.Year;
+        }
+        return original;
+    }
 
     // Exact approved ID + MediaName pairs, not a broad "ID" substring filter.
     public static bool IsInitialDrive(long id, string media) =>

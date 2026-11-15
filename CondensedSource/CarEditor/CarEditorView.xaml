@@ -728,6 +728,18 @@
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="*"/>
               </Grid.ColumnDefinitions>
+              <Button x:Name="AddTrafficBtn" Grid.Column="0" Content="＋ Traffic cars" Style="{StaticResource GhostButton}"
+                      IsEnabled="False" Padding="6,5" FontSize="10.5" Margin="0,0,4,0" Click="AddTraffic_Click"
+                      ToolTip="Make every drivable traffic car purchasable in the Autoshow (preserves free-roam traffic spawning and excludes null cars)."/>
+              <Button x:Name="RemoveTrafficBtn" Grid.Column="1" Content="− Traffic cars" Style="{StaticResource GhostButton}"
+                      IsEnabled="False" Padding="6,5" FontSize="10.5" Margin="4,0,0,0" Click="RemoveTraffic_Click"
+                      ToolTip="Hide traffic cars from the Autoshow and restore their traffic-only database flags (keeps performance and swap edits)."/>
+            </Grid>
+            <Grid Margin="0,7,0,0">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+              </Grid.ColumnDefinitions>
               <Button x:Name="AllPriceOneBtn" Grid.Column="0" Content="All cars = 1 CR" Style="{StaticResource GhostButton}"
                       IsEnabled="False" Padding="6,5" FontSize="10.5" Margin="0,0,4,0" Click="AllPriceOne_Click"
                       ToolTip="Set BaseCost to 1 for every car in the loaded working database."/>
@@ -837,6 +849,9 @@
                 </Grid>
                 <StackPanel x:Name="EngineNamesPanel" Margin="0,8,0,0">
                   <WrapPanel>
+                    <Button x:Name="UnlockEngineUpgradesBtn" Content="⚡ Unlock missing engine upgrades" Style="{StaticResource GhostButton}"
+                            Padding="9,6" FontSize="11" Margin="0,0,6,4" Click="UnlockEngineUpgrades_Click"
+                            ToolTip="Synthesize Street, Sport, and Race upgrade parts for engines (such as hypercars, race cars, Warthog, Regera, Venom GT) that Playground Games authored with 0 non-stock upgrades. Restores the in-game Engine upgrade menu category."/>
                     <Button x:Name="LabelStockEnginesBtn" Content="Label stock engines" Style="{StaticResource GhostButton}"
                             IsEnabled="False" Padding="9,6" FontSize="11" Margin="0,0,6,4" Click="LabelStockEngines_Click"
                             ToolTip="Name every verified stock engine: donor car - original engine name, or just the donor car when its engine description is blank. Existing swaps share that name; no IDs or physics change. Export to keep it."/>

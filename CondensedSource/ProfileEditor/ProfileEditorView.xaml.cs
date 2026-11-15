@@ -28,6 +28,7 @@ public partial class ProfileEditorView : UserControl
     ProfileContainer _container;    // parsed sections (SQLite in section 3)
     string _sqlitePath;             // temp working copy of the embedded database
     SqliteConnection _conn;
+    string _loadedPath;
     string _loadedName;
     string _currentTable;
     readonly Fh2SaveHost _fh2Host;
@@ -83,8 +84,8 @@ public partial class ProfileEditorView : UserControl
     {
         var dlg = new OpenFileDialog
         {
-            Title = "Select an FH6 save or FH2 revision file",
-            Filter = "FH6 / FH2 save files|C_ProfileData*;commit;ProfileData;PlayerDatabase|All files|*.*",
+            Title = "Select an FH5/FH6 save or FH2 revision file",
+            Filter = "Forza save files|C_ProfileData*;*.ProfileData;commit;ProfileData;PlayerDatabase;*.decrypted|All files|*.*",
         };
         if (dlg.ShowDialog() != true) return;
         try { if (Fh2SaveRevision.IsCandidate(dlg.FileName)) await _fh2Host.OpenAsync(dlg.FileName); else LoadProfile(dlg.FileName); }
@@ -95,14 +96,15 @@ public partial class ProfileEditorView : UserControl
 
     void LoadProfile(string path, bool forceFh5 = false)
     {
-        const string fh5Disabled = "FH5 save viewing is disabled for now. Use Crypto → Decrypt to export the decrypted profile. FH5 save editing and Save Swap are not enabled.";
-        if (forceFh5 || Fh5ProfileCrypto.IsDatabaseExport(path)) throw new NotSupportedException(fh5Disabled);
         byte[] bytes = Fh5ProfileCrypto.ReadInput(path);
         byte[] stream;
         bool outerCrypto;
         bool fh5 = forceFh5 || Fh5ProfileCrypto.HasHeaderAuthentication(bytes.Length, bytes);
         if (fh5)
-            throw new NotSupportedException(fh5Disabled);
+        {
+            stream = Fh5ProfileCrypto.Decrypt(bytes);
+            outerCrypto = true;
+        }
         else if (bytes.Length >= 4 && bytes.AsSpan(0, 4).SequenceEqual(ProfileMarkerLE))
         {
             stream = bytes;                    // already-decrypted, uncompressed section stream
@@ -115,10 +117,11 @@ public partial class ProfileEditorView : UserControl
         }
 
         var container = ProfileContainer.Parse(stream);
-        if (!outerCrypto && Fh5ProfileCrypto.IsProfileDatabase(container.Database)) throw new NotSupportedException(fh5Disabled);
+        if (!outerCrypto && Fh5ProfileCrypto.IsProfileDatabase(container.Database))
+            fh5 = true;
 
         CloseConnection();
-        _fh5ReadOnly = fh5;
+        _isFh5 = fh5;
         _outerCryptoApplied = outerCrypto;
         _fh5TableOffset = 0;
         _currentTable = null;
@@ -136,9 +139,10 @@ public partial class ProfileEditorView : UserControl
 
         _originalBytes = bytes;
         _container = container;
+        _loadedPath = Path.GetFullPath(path);
         _loadedName = Path.GetFileName(path);
 #if PROFILE_UNLOCK_TESTING
-        if (!_fh5ReadOnly)
+        if (!_isFh5)
         {
             var gameData = ProfileGameData.AttachAutomatically(container);
             Log(gameData.Message, gameData.Loaded ? "ok" : "info");
@@ -151,7 +155,7 @@ public partial class ProfileEditorView : UserControl
         LoadTableList();
         SummaryText.Text =
             $"{_loadedName}   ·   {_tables.Count} data tables   ·   database {container.Database.Length:n0} bytes   ·   integrity {integrity}   ·   " +
-            (_fh5ReadOnly ? "FH5 · READ-ONLY · original unchanged · no edited-save export" : _outerCryptoApplied ? "encrypted save (re-encrypted automatically when you Save)" : "already-decrypted stream");
+            (_isFh5 ? (_outerCryptoApplied ? "FH5 encrypted save (re-encrypted automatically when you Save)" : "FH5 decrypted stream") : _outerCryptoApplied ? "FH6 encrypted save (re-encrypted automatically when you Save)" : "already-decrypted stream");
         StatusLine.Text = $"{_loadedName} loaded — {_tables.Count} tables";
         SaveBtn.IsEnabled = true;
         Log($"loaded {_loadedName}: {_tables.Count} tables, database {container.Database.Length:n0} bytes, integrity {integrity}", "ok");
@@ -159,7 +163,7 @@ public partial class ProfileEditorView : UserControl
         BuildProperties();
         BuildSaveState();
         BuildCareer();
-        ApplyFh5ReadOnlyMode();
+        ApplyFh5Mode();
         BuildOverview();
         ShowOverviewView();   // land on the friendly Overview after a load
     }
@@ -168,7 +172,7 @@ public partial class ProfileEditorView : UserControl
     void OpenConnection()
     {
         _conn = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = _sqlitePath, Pooling = false,
-            Mode = _fh5ReadOnly ? SqliteOpenMode.ReadOnly : SqliteOpenMode.ReadWrite }.ToString());
+            Mode = SqliteOpenMode.ReadWrite }.ToString());
         _conn.Open();
     }
 
@@ -224,7 +228,7 @@ public partial class ProfileEditorView : UserControl
         var dt = new DataTable();
         using (var cmd = _conn.CreateCommand())
         {
-            cmd.CommandText = $"SELECT rowid AS __rowid__, * FROM {Quote(table)} ORDER BY rowid LIMIT {RowLimit} OFFSET {(_fh5ReadOnly ? _fh5TableOffset : 0)}";
+            cmd.CommandText = $"SELECT rowid AS __rowid__, * FROM {Quote(table)} ORDER BY rowid LIMIT {RowLimit} OFFSET {(_isFh5 ? _fh5TableOffset : 0)}";
             using var r = cmd.ExecuteReader();
             for (int i = 0; i < r.FieldCount; i++) dt.Columns.Add(r.GetName(i), typeof(string));
             while (r.Read())
@@ -238,9 +242,9 @@ public partial class ProfileEditorView : UserControl
         RowGrid.ItemsSource = dt.DefaultView;
         GridTitle.Text = $"{table.ToUpperInvariant()}   ·   showing {dt.Rows.Count} of {total:n0}";
         _fh5TableRows = total;
-        if (_fh5ReadOnly) GridTitle.Text = $"{table} · {(_fh5TableOffset + (dt.Rows.Count > 0 ? 1 : 0)):n0}–{_fh5TableOffset + dt.Rows.Count:n0} / {total:n0}";
-        Fh5PreviousRows.IsEnabled = _fh5ReadOnly && _fh5TableOffset > 0;
-        Fh5NextRows.IsEnabled = _fh5ReadOnly && _fh5TableOffset + dt.Rows.Count < total;
+        if (_isFh5) GridTitle.Text = $"{table} · {(_fh5TableOffset + (dt.Rows.Count > 0 ? 1 : 0)):n0}–{_fh5TableOffset + dt.Rows.Count:n0} / {total:n0}";
+        Fh5PreviousRows.IsEnabled = _isFh5 && _fh5TableOffset > 0;
+        Fh5NextRows.IsEnabled = _isFh5 && _fh5TableOffset + dt.Rows.Count < total;
     }
 
     void RowGrid_AutoGenColumn(object sender, DataGridAutoGeneratingColumnEventArgs e)
@@ -250,7 +254,6 @@ public partial class ProfileEditorView : UserControl
 
     void RowGrid_CellEditEnding(object sender, DataGridCellEditEndingEventArgs e)
     {
-        if (_fh5ReadOnly) { e.Cancel = true; return; }
         if (e.EditAction != DataGridEditAction.Commit) return;
         if (_conn == null || _currentTable == null) return;
         if (e.Row.Item is not DataRowView view) return;
@@ -284,7 +287,6 @@ public partial class ProfileEditorView : UserControl
     // ============================================================ SQL runner
     void RunSql_Click(object sender, RoutedEventArgs e)
     {
-        if (_fh5ReadOnly) { Log("FH5 saves are read-only; SQL commands are disabled.", "info"); return; }
         if (_conn == null) { Log("load a profile first", "err"); return; }
         string sql = (SqlBox.Text ?? "").Trim();
         if (sql.Length == 0) { Log("enter a SQL statement", "err"); return; }
@@ -344,7 +346,7 @@ public partial class ProfileEditorView : UserControl
         PropView.Visibility   = ReferenceEquals(view, PropView)   ? Visibility.Visible : Visibility.Collapsed;
         SaveView.Visibility   = ReferenceEquals(view, SaveView)   ? Visibility.Visible : Visibility.Collapsed;
         CareerView.Visibility = ReferenceEquals(view, CareerView) ? Visibility.Visible : Visibility.Collapsed;
-        SqlCard.Visibility    = ReferenceEquals(view, DbBody) && !_fh5ReadOnly ? Visibility.Visible : Visibility.Collapsed;
+        SqlCard.Visibility    = ReferenceEquals(view, DbBody) ? Visibility.Visible : Visibility.Collapsed;
     }
 
     void ShowOverviewView()
@@ -410,8 +412,8 @@ public partial class ProfileEditorView : UserControl
 
         foreach (var pair in tree.Walk()) _allProps.Add(pair);
         int editable = _allProps.Count(p => p.Node.IsEditable);
-        PropTitle.Text = _fh5ReadOnly ? $"FH5 PROFILE VALUES · {_allProps.Count:n0} nodes · read-only" : $"PROFILE PROPERTIES   ·   {_allProps.Count:n0} nodes, {editable:n0} editable";
-        Log(_fh5ReadOnly ? $"FH5 typed properties: {_allProps.Count:n0} nodes (read-only)" : $"typed properties: {_allProps.Count:n0} nodes ({editable:n0} editable)", "ok");
+        PropTitle.Text = $"PROFILE PROPERTIES   ·   {_allProps.Count:n0} nodes, {editable:n0} editable";
+        Log($"typed properties: {_allProps.Count:n0} nodes ({editable:n0} editable)", "ok");
         RenderProperties();
     }
 
@@ -485,7 +487,6 @@ public partial class ProfileEditorView : UserControl
 
     void PropGrid_CellEditEnding(object sender, DataGridCellEditEndingEventArgs e)
     {
-        if (_fh5ReadOnly) { e.Cancel = true; return; }
         if (e.EditAction != DataGridEditAction.Commit) return;
         if (e.Column?.Header?.ToString() != "Value") return;
         if (e.Row.Item is not DataRowView view) return;
@@ -582,7 +583,6 @@ public partial class ProfileEditorView : UserControl
 
     void StringGrid_CellEditEnding(object sender, DataGridCellEditEndingEventArgs e)
     {
-        if (_fh5ReadOnly) { e.Cancel = true; return; }
         if (e.EditAction != DataGridEditAction.Commit) return;
         if (e.Column?.Header?.ToString() != "Text") return;
         if (e.Row.Item is not DataRowView view) return;
@@ -723,7 +723,6 @@ public partial class ProfileEditorView : UserControl
 
     void ApplyXuid_Click(object sender, RoutedEventArgs e)
     {
-        if (_fh5ReadOnly) return;
         var bc = _container?.Career;
         if (bc == null || !bc.HasXuid) return;
         string text = (XuidBox.Text ?? "").Trim();
@@ -739,7 +738,7 @@ public partial class ProfileEditorView : UserControl
     // ============================================================ overview (friendly landing)
     void BuildOverview()
     {
-        if (_fh5ReadOnly) { BuildFh5Overview(); return; }
+        if (_isFh5) { BuildFh5Overview(); return; }
 #if PROFILE_UNLOCK_TESTING
         using var catalogScope = ProfileGameData.Use(_container);
 #endif
@@ -863,9 +862,23 @@ public partial class ProfileEditorView : UserControl
         var node = match.Node;
         if (node == null || !node.IsEditable) return false;
         OverviewPanel.Children.Add(EditRow(label, hint, node.DisplayValue(),
-            text => node.TrySetFromText(text)
-                ? (true, node.DisplayValue())
-                : (false, $"enter a valid {FriendlyType(node)}")));
+            text =>
+            {
+                if (!node.TrySetFromText(text)) return (false, $"enter a valid {FriendlyType(node)}");
+                if (string.Equals(path, "/Main/Credits", StringComparison.OrdinalIgnoreCase) &&
+                    ulong.TryParse(text.Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out ulong credits))
+                {
+                    var totalCreditsMatch = _allProps.FirstOrDefault(p => string.Equals(p.Path, "/Main/TotalCredits", StringComparison.OrdinalIgnoreCase));
+                    if (totalCreditsMatch.Node is { IsEditable: true } totalNode &&
+                        ulong.TryParse(totalNode.DisplayValue(), NumberStyles.None, CultureInfo.InvariantCulture, out ulong totalCredits) &&
+                        credits > totalCredits)
+                    {
+                        totalNode.TrySetFromText(text.Trim());
+                    }
+                }
+                BuildProperties();
+                return (true, node.DisplayValue());
+            }));
         return true;
     }
 
@@ -1084,12 +1097,14 @@ public partial class ProfileEditorView : UserControl
     // ============================================================ save
     void Save_Click(object sender, RoutedEventArgs e)
     {
-        if (_fh5ReadOnly) { Log("FH5 save inspection only; edited-save export is disabled.", "info"); return; }
         if (_container == null || _conn == null) { Log("load a profile first", "err"); return; }
+        string defaultName = _isFh5
+            ? (string.IsNullOrEmpty(_loadedName) ? "User_ProfileData.edited" : $"{_loadedName}.edited")
+            : "C_ProfileData.edited";
         var dlg = new SaveFileDialog
         {
-            Title = "Save the edited ProfileData",
-            FileName = "C_ProfileData.edited",
+            Title = _isFh5 ? "Save the edited FH5 ProfileData" : "Save the edited ProfileData",
+            FileName = defaultName,
             Filter = "ProfileData|*.*",
         };
         if (dlg.ShowDialog() != true) return;
@@ -1099,7 +1114,10 @@ public partial class ProfileEditorView : UserControl
 
     void SaveProfile(string destination)
     {
-        if (_fh5ReadOnly) throw new InvalidOperationException("FH5 saves are read-only. No edited-save export is supported.");
+        if (_isFh5 && SaveLocator.IsLiveWgsContainerPath(destination))
+            throw new InvalidOperationException("Cannot export directly into a live Windows Store (WGS) save directory. Save to a separate folder first.");
+        if (string.Equals(Path.GetFullPath(destination), _loadedPath, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Export to a separate file to keep your original save unchanged as a backup.");
 #if PROFILE_UNLOCK_TESTING
         if (_hasUnlockTestEdits && string.Equals(Path.GetFullPath(destination), _unlockTestInputPath, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Unlock and wristband edits must be exported to a separate file. Keep the original profile and a full save backup unchanged.");
@@ -1122,11 +1140,22 @@ public partial class ProfileEditorView : UserControl
         byte[] output;
         if (_outerCryptoApplied)
         {
-            output = ProfileData.Encrypt(stream, _originalBytes);
-            // verify the round trip decrypts back to exactly what we packed
-            byte[] check = ProfileData.Decrypt(output);
-            if (!check.AsSpan().SequenceEqual(stream))
-                throw new InvalidDataException("re-encrypted profile failed round-trip verification; nothing was written.");
+            if (_isFh5)
+            {
+                output = Fh5ProfileCrypto.Encrypt(stream, _originalBytes);
+                // verify the round trip decrypts back to exactly what we packed
+                byte[] check = Fh5ProfileCrypto.Decrypt(output, out _);
+                if (!check.AsSpan().SequenceEqual(stream))
+                    throw new InvalidDataException("re-encrypted FH5 profile failed round-trip verification; nothing was written.");
+            }
+            else
+            {
+                output = ProfileData.Encrypt(stream, _originalBytes);
+                // verify the round trip decrypts back to exactly what we packed
+                byte[] check = ProfileData.Decrypt(output);
+                if (!check.AsSpan().SequenceEqual(stream))
+                    throw new InvalidDataException("re-encrypted profile failed round-trip verification; nothing was written.");
+            }
         }
         else
         {
@@ -1136,7 +1165,7 @@ public partial class ProfileEditorView : UserControl
         File.WriteAllBytes(destination, output);
         OpenConnection();   // reopen so editing can continue
 
-        Log($"saved {Path.GetFileName(destination)}  ·  {output.Length:n0} bytes  ·  {(_outerCryptoApplied ? "re-encrypted + verified" : "decrypted stream")}", "ok");
+        Log($"saved {Path.GetFileName(destination)}  ·  {output.Length:n0} bytes  ·  {(_outerCryptoApplied ? (_isFh5 ? "FH5 re-encrypted + verified" : "re-encrypted + verified") : "decrypted stream")}", "ok");
         StatusLine.Text = $"saved {Path.GetFileName(destination)}";
     }
 

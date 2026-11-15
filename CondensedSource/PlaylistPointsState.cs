@@ -16,8 +16,8 @@ public static partial class PlaylistPointsState
     sealed record Track(int Id, int Points);
     sealed record TrackSeries(uint Id, List<Track> Tracks);
     sealed record Tail(int Offset, List<TrackSeries> Series, byte[] Metadata, int LifetimeOffset, int Lifetime);
-    sealed record State(Dictionary<uint, Score> Series, Dictionary<(uint Series, uint Season), Score> Seasons, Tail Tail, int ContentOffset,
-        int ScoreMapsOffset, List<uint> SeasonRoots);
+    sealed record State(uint Version, Dictionary<uint, Score> Series, Dictionary<(uint Series, uint Season), Score> Seasons, Tail Tail, int ContentOffset,
+        int ScoreMapsOffset, List<uint> SeasonRoots, int BaseTrack);
 
     public static bool TryRead(ProfileContainer? container, out Season[] seasons, out string reason)
     {
@@ -38,9 +38,10 @@ public static partial class PlaylistPointsState
         if (delta == 0) { reason = ""; return true; }
         if (!TrackScoresMatch(state, series))
         { reason = "This Series has different saved point totals. Use Complete playlist with matching game data to rebuild them. Nothing was changed."; return false; }
+        int baseTrack = state.BaseTrack;
         long nextSeries = state.Series[series].Value + delta, lifetime = state.Tail.Lifetime + delta;
         var target = state.Tail.Series.SingleOrDefault(s => s.Id == series);
-        int index = target?.Tracks.FindIndex(t => t.Id == BaseTrack) ?? -1;
+        int index = target?.Tracks.FindIndex(t => t.Id == baseTrack) ?? -1;
         long nextTrack = (index < 0 ? 0 : target!.Tracks[index].Points) + delta;
         if (nextSeries is < 0 or > int.MaxValue || lifetime is < 0 or > int.MaxValue || nextTrack is < 0 or > int.MaxValue)
         { reason = "That score would overflow a total or remove points belonging to another track. Nothing was changed."; return false; }
@@ -49,22 +50,25 @@ public static partial class PlaylistPointsState
         var trackSeries = state.Tail.Series.Select(s => new TrackSeries(s.Id, s.Tracks.ToList())).ToList();
         target = trackSeries.SingleOrDefault(s => s.Id == series);
         if (target == null) { target = new(series, new()); trackSeries.Add(target); }
-        if (index < 0) target.Tracks.Add(new(BaseTrack, (int)nextTrack));
-        else target.Tracks[index] = new(BaseTrack, (int)nextTrack);
+        if (index < 0) target.Tracks.Add(new(baseTrack, (int)nextTrack));
+        else target.Tracks[index] = new(baseTrack, (int)nextTrack);
         if (nextTrack == 0)
         {
             // A zero contribution is represented by an absent map entry in
             // naturally uninitialized saves. Keeping a synthetic empty Series
             // can otherwise make the surrounding zero-valued suffix ambiguous.
-            target.Tracks.RemoveAll(t => t.Id == BaseTrack);
+            target.Tracks.RemoveAll(t => t.Id == baseTrack);
             if (target.Tracks.Count == 0) trackSeries.Remove(target);
         }
-        byte[] metadata = (byte[])state.Tail.Metadata.Clone(); Put(metadata, state.Tail.LifetimeOffset, (int)lifetime);
         using var output = new MemoryStream(); using (var writer = new BinaryWriter(output, System.Text.Encoding.UTF8, true))
         {
             writer.Write(prefix); writer.Write((uint)trackSeries.Count);
             foreach (var item in trackSeries) { writer.Write(item.Id); writer.Write((uint)item.Tracks.Count); foreach (var track in item.Tracks) { writer.Write(track.Id); writer.Write(track.Points); } }
-            writer.Write(metadata);
+            if (state.Version != 8)
+            {
+                byte[] metadata = (byte[])state.Tail.Metadata.Clone(); Put(metadata, state.Tail.LifetimeOffset, (int)lifetime);
+                writer.Write(metadata);
+            }
         }
         byte[] edited = output.ToArray();
         if (!TryParse(edited, out var verified, out reason) || verified!.Seasons[(series, season)].Value != points
@@ -91,18 +95,19 @@ public static partial class PlaylistPointsState
         try
         {
             var r = new Reader(bytes); uint version = r.U32();
-            if (version is not (2 or 4 or 5)) return false;
+            if (version is not (2 or 4 or 5 or 8)) return false;
+            int baseTrack = version == 8 ? 800 : 820;
             // Season reward maps, then Series reward maps. Each reward has a
-            // saved u64 ID and three acquisition flags; never rewrite any flag.
+            // saved ID and three acquisition flags; never rewrite any flag.
             uint count = r.Count(MaxSeries); var roots = new HashSet<uint>();
             for (int i = 0; i < count; i++)
             {
                 if (!roots.Add(r.U32())) return false;
                 uint seasons = r.Count(4); var keys = new HashSet<uint>();
-                for (int j = 0; j < seasons; j++) { uint key = r.U32(); if (key > 3 || !keys.Add(key)) return false; r.Rewards(); }
+                for (int j = 0; j < seasons; j++) { uint key = r.U32(); if (key > 3 || !keys.Add(key)) return false; r.Rewards(version); }
             }
             count = r.Count(MaxSeries); roots.Clear();
-            for (int i = 0; i < count; i++) { if (!roots.Add(r.U32())) return false; r.Rewards(); }
+            for (int i = 0; i < count; i++) { if (!roots.Add(r.U32())) return false; r.Rewards(version); }
             int scoreMapsOffset = r.Offset;
             count = r.Count(MaxSeries); var series = new Dictionary<uint, Score>();
             for (int i = 0; i < count; i++) { uint id = r.U32(); var score = r.Score(); if (!series.TryAdd(id, score)) return false; }
@@ -120,7 +125,7 @@ public static partial class PlaylistPointsState
             // the suffix at its exact boundary. Saved per-track caches can differ
             // from the primary scores, so their sums cannot locate that boundary.
             int contentOffset = r.Offset;
-            if (!TryActivityMaps(bytes, contentOffset, series, out var activities)) return false;
+            if (!TryActivityMaps(bytes, contentOffset, series, version, out var activities)) return false;
             r.Offset = activities!.End;
             for (int map = 0; map < 2; map++)
             {
@@ -136,13 +141,13 @@ public static partial class PlaylistPointsState
                     }
                 }
             }
-            if (!TryTail(bytes, r.Offset, series, out var tail)) return false;
-            state = new(series, seasonScores, tail!, contentOffset, scoreMapsOffset, seasonRoots); reason = ""; return true;
+            if (!TryTail(bytes, r.Offset, series, version, out var tail)) return false;
+            state = new(version, series, seasonScores, tail!, contentOffset, scoreMapsOffset, seasonRoots, baseTrack); reason = ""; return true;
         }
         catch (Exception error) when (error is InvalidDataException or ArgumentOutOfRangeException or OverflowException) { return false; }
     }
 
-    static bool TryTail(byte[] bytes, int at, Dictionary<uint, Score> scores, out Tail? tail)
+    static bool TryTail(byte[] bytes, int at, Dictionary<uint, Score> scores, uint version, out Tail? tail)
     {
         tail = null;
         try
@@ -158,12 +163,18 @@ public static partial class PlaylistPointsState
                 series.Add(new(id, values));
             }
             if (scores.Any(s => s.Value.Value > 0 && !seen.Contains(s.Key))) return false;
+            if (version == 8)
+            {
+                if (r.Offset != bytes.Length) return false;
+                tail = new(at, series, Array.Empty<byte>(), -1, (int)scores.Values.Sum(s => (long)s.Value));
+                return true;
+            }
             int metadataStart = r.Offset; uint seenCount = r.Count(scores.Count); seen.Clear();
             if (seenCount == 0) return false;
             for (int i = 0; i < seenCount; i++) { uint id = r.U32(); if (!scores.ContainsKey(id) || !seen.Add(id)) return false; }
             int lifetimeOffset = r.Offset - metadataStart; int lifetime = r.Score().Value;
             if (lifetime != scores.Values.Sum(s => (long)s.Value)) return false;
-            r.Rewards(); if (r.Offset != bytes.Length) return false;
+            r.Rewards(version); if (r.Offset != bytes.Length) return false;
             tail = new(at, series, bytes[metadataStart..], lifetimeOffset, lifetime); return true;
         }
         catch (Exception error) when (error is InvalidDataException or ArgumentOutOfRangeException or OverflowException) { return false; }
@@ -179,11 +190,18 @@ public static partial class PlaylistPointsState
         internal uint U32() { if (Offset > bytes.Length - 4) throw new InvalidDataException(); uint value = BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(Offset)); Offset += 4; return value; }
         internal uint Count(int max) { uint value = U32(); if (value > max) throw new InvalidDataException(); return value; }
         internal Score Score() { int at = Offset; uint value = U32(); if (value > int.MaxValue) throw new InvalidDataException(); return new((int)value, at); }
-        internal void Rewards()
+        internal void Rewards(uint version)
         {
             uint count = Count(10000); var ids = new HashSet<ulong>();
-            if (Offset + count * 11L > bytes.Length) throw new InvalidDataException();
-            for (int i = 0; i < count; i++) { ulong id = BinaryPrimitives.ReadUInt64LittleEndian(bytes.AsSpan(Offset)); if (id == 0 || !ids.Add(id)) throw new InvalidDataException(); Offset += 8; for (int flag = 0; flag < 3; flag++) if (bytes[Offset++] > 1) throw new InvalidDataException(); }
+            int idSize = version == 8 ? 4 : 8;
+            if (Offset + count * (idSize + 3L) > bytes.Length) throw new InvalidDataException();
+            for (int i = 0; i < count; i++)
+            {
+                ulong id = version == 8 ? U32() : BinaryPrimitives.ReadUInt64LittleEndian(bytes.AsSpan(Offset));
+                if (version != 8) Offset += 8;
+                if (id == 0 || !ids.Add(id)) throw new InvalidDataException();
+                for (int flag = 0; flag < 3; flag++) if (bytes[Offset++] > 1) throw new InvalidDataException();
+            }
         }
     }
     static void Put(byte[] bytes, int offset, int value) => BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(offset), value);

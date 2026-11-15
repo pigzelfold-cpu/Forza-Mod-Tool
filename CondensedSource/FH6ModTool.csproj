@@ -47,6 +47,7 @@
     <EmbeddedResource Include="AnimationSwap\stock_baseline.json" />
     <EmbeddedResource Include="Assets\Reference\TrackLabels\*.str.gz" LogicalName="FH6LocalCryptoTool.TrackLabels.%(Filename)%(Extension)" />
     <EmbeddedResource Include="Assets\Reference\Thumbnails\*.map.gz" LogicalName="FH6LocalCryptoTool.Thumbnails.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Assets\Crypto\LegacyTfit.bin" LogicalName="FH6LocalCryptoTool.LegacyTfit.bin" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="Help\*.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />

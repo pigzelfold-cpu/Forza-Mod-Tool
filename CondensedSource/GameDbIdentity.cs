@@ -3,7 +3,7 @@ using Microsoft.Data.Sqlite;
 
 namespace FH6LocalCryptoTool;
 
-public enum ForzaGame { Unknown, Horizon2, Horizon5, Horizon6, Motorsport8 }
+public enum ForzaGame { Unknown, Horizon2, Horizon5, Horizon6, Motorsport8, Horizon3, Horizon4, Motorsport6Apex, Motorsport7 }
 
 /// <summary>Game identity from independent schema signatures. VersionInfo is
 /// used separately to select an exact clean reference, never as a game guess.</summary>
@@ -11,8 +11,10 @@ public static class GameDbIdentity
 {
     public static string DisplayName(ForzaGame game) => game switch
     {
-        ForzaGame.Horizon2 => "FH2", ForzaGame.Horizon5 => "FH5",
-        ForzaGame.Horizon6 => "FH6", ForzaGame.Motorsport8 => "FM8", _ => "Unknown Forza DB"
+        ForzaGame.Horizon2 => "FH2", ForzaGame.Horizon3 => "FH3", ForzaGame.Horizon4 => "FH4",
+        ForzaGame.Horizon5 => "FH5", ForzaGame.Horizon6 => "FH6",
+        ForzaGame.Motorsport6Apex => "FM6 Apex", ForzaGame.Motorsport7 => "FM7",
+        ForzaGame.Motorsport8 => "FM8", _ => "Unknown Forza DB"
     };
 
     public static ForzaGame Detect(string sqlitePath)
@@ -66,7 +68,12 @@ public static class GameDbIdentity
         if (car.Contains("NotAvailableInAutoshow"))
         {
             if (engine.Contains("BackfireIntensityScalar") && engine.Contains("BackfireSootToFireRatioScalar")) return Result(ForzaGame.Horizon6);
-            if (engine.Contains("EngineGraphingAspirationID") && spring.Contains("SteeringSettingsProfileID")) return Result(ForzaGame.Horizon5);
+            if (car.Contains("ConvertibleType") && car.Contains("RaceMode") &&
+                engine.Contains("EngineGraphingAspirationID") && spring.Contains("SteeringSettingsProfileID")) return Result(ForzaGame.Horizon5);
+            if (car.Contains("FrontDownforceClampKG") && (tables.Contains("CareerEventSeasonInfo") || tables.Contains("AllIECars")) &&
+                spring.Contains("SteerMaxAngle")) return Result(ForzaGame.Horizon4);
+            if ((tables.Contains("AnthemOnlineEvents") || tables.Contains("CareerRaceChallenges") || tables.Contains("CarMeets")) &&
+                !car.Contains("FrontDownforceClampKG")) return Result(ForzaGame.Horizon3);
         }
         if (car.Contains("IsArcade") && tables.Contains("AnthemEventRaces") && tables.Contains("Campaigns") &&
             !spring.Contains("SteerMaxAngle")) return Result(ForzaGame.Horizon2);

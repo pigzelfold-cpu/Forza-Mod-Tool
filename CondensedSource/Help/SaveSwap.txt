@@ -1,15 +1,18 @@
-Save Swap - FH6 only
+Save Swap - Forza Horizon 5 & Forza Horizon 6
 
-Close FH6 and back up the whole save folder. Use copies of both saves.
+Close the game and back up your entire save folder first. Originals are never overwritten.
 
-1. DONOR SAVE: the C_ProfileData with the progress you want.
-2. TARGET SAVE: your own C_ProfileData. Double-check the order.
-3. Build Swapped Save writes a .swapped file beside the target.
-4. Install an encrypted copy of that output as C_ProfileData. Keep your backup.
+1. DONOR SAVE: the FH5 ProfileData (latest, v1.619.349.0, or legacy 2021-2023 build) or FH6 C_ProfileData with the progress you want.
+2. TARGET SAVE: your own FH5 ProfileData or FH6 C_ProfileData (click Find Save... to locate installed saves automatically). Double-check the order.
+3. Build Swapped Save writes a verified .swapped file encrypted in your target save's exact format and account identity (outside live SystemAppData\wgs folders for MS Store saves).
+4. Replace your target save file with a renamed copy of the .swapped output while the game is closed. Keep your backup.
 
-The donor supplies progress; the target supplies account identity.
+The donor supplies progress; the target supplies account identity (XUID) and encryption format/IV. Older downloaded FH5 donor saves are automatically re-encrypted for your target FH5 version.
 
-Save location:
-C:\XboxGames\GameSave\pgs\u_<account>_<suffix>\current\ContainersRoot\User_<account>\C_ProfileData
+Save locations:
+- FH5 Steam: <Steam>\userdata\<steamId>\1551360\remote\<xuid>\User_<hex>.ProfileData
+- FH5 MS Store / Xbox App: %LOCALAPPDATA%\Packages\Microsoft.624F8B84B80_8wekyb3d8bbwe\SystemAppData\wgs\<account>\<container>\<guid>
+- FH5 OnlineFix / EMPRESS: C:\Users\Public\Documents\OnlineFix\1551360\Saves\... or C:\Users\Public\Documents\EMPRESS\1551360\...
+- FH6 Xbox / Retail (PGS): C:\XboxGames\GameSave\pgs\u_<account>_<suffix>\current\ContainersRoot\User_<account>\C_ProfileData
 
-FH2, FH5 and FM8 save swapping are not supported.
+Both donor and target saves must be from the same game (FH5 -> FH5, or FH6 -> FH6).

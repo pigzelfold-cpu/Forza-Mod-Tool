@@ -79,7 +79,7 @@ public static class MotorsportLzxArchive
         RejectReparse(Path.Combine(root, TemplateName));
         var manifest = JsonSerializer.Deserialize<Manifest>(ReadBounded(Path.Combine(root, ManifestName), 64 * 1024))
             ?? throw new InvalidDataException("Missing ZIP workspace metadata.");
-        if (manifest.Format != Format || Path.GetFileName(manifest.OriginalName) != manifest.OriginalName || !manifest.OriginalName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+        if (manifest.Format != Format || string.IsNullOrWhiteSpace(manifest.OriginalName) || Path.GetFileName(manifest.OriginalName) != manifest.OriginalName)
             throw new InvalidDataException("Unsupported or damaged ZIP workspace metadata.");
         SafeName(manifest.OriginalName);
         byte[] source = ReadBounded(Path.Combine(root, TemplateName), MaxArchive);

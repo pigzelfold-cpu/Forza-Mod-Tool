@@ -65,22 +65,23 @@ sealed class HandlingSnapshot
 // Never written to the DB — purely for how the tool lists cars/engines/motors.
 static class Naming
 {
-    static readonly Dictionary<string, string> Makes = new()
+    static readonly Dictionary<string, string> Makes = new(StringComparer.OrdinalIgnoreCase)
     {
-        {"343","Halo"},{"AC","AC"},{"ACU","Acura"},{"AH","Austin-Healey"},{"ALF","Alfa Romeo"},{"APO","Apollo"},
-        {"ARI","Ariel"},{"AST","Aston Martin"},{"AUD","Audi"},{"AZM","Autozam"},{"BAC","BAC"},{"BEN","Bentley"},
-        {"BMW","BMW"},{"BUI","Buick"},{"CAD","Cadillac"},{"CAN","Can-Am"},{"CHE","Chevrolet"},{"CHR","Chrysler"},
-        {"DAT","Datsun"},{"DEL","DeLorean"},{"DET","De Tomaso"},{"DOD","Dodge"},{"EXO","Exomotive"},{"FER","Ferrari"},
-        {"FIA","Fiat"},{"FOR","Ford"},{"FUN","Funco"},{"GMA","Gordon Murray"},{"GMC","GMC"},{"HEN","Hennessey"},
-        {"HOL","Holden"},{"HON","Honda"},{"HYU","Hyundai"},{"JAG","Jaguar"},{"JEE","Jeep"},{"JIM","Jimco"},
-        {"KOE","Koenigsegg"},{"KTM","KTM"},{"LAM","Lamborghini"},{"LAN","Lancia"},{"LEX","Lexus"},{"LIN","Lincoln"},
-        {"LOT","Lotus"},{"LR","Land Rover"},{"LUC","Lucid"},{"MAS","Maserati"},{"MAZ","Mazda"},{"MCL","McLaren"},
-        {"MER","Mercedes-Benz"},{"MEY","Meyers Manx"},{"MG","MG"},{"MIN","Mini"},{"MIT","Mitsubishi"},{"NIS","Nissan"},
-        {"NOB","Noble"},{"NUL","Test Car"},{"OPE","Opel"},{"PAG","Pagani"},{"PEE","Peel"},{"PEN","Penhall"},
-        {"PEU","Peugeot"},{"PG","Playground"},{"PLY","Plymouth"},{"POL","Polaris"},{"PON","Pontiac"},{"POR","Porsche"},
-        {"RAD","Radical"},{"RAM","RAM"},{"REL","Reliant"},{"REN","Renault"},{"RIM","Rimac"},{"RIV","Rivian"},
-        {"RJ","RJ Anderson"},{"SAL","Saleen"},{"SHE","Shelby"},{"SIE","Sierra"},{"SUB","Subaru"},{"TOY","Toyota"},
-        {"TVR","TVR"},{"ULT","Ultima"},{"VIP","SRT"},{"VOL","Volvo"},{"VW","Volkswagen"},{"WUL","Wuling"},{"ZEN","Zenvo"},
+        {"343","Halo"},{"AC","AC"},{"ACU","Acura"},{"AH","Austin-Healey"},{"ALF","Alfa Romeo"},{"AMC","AMC"},{"APO","Apollo"},
+        {"ARI","Ariel"},{"ARM","Armstrong Siddeley"},{"ASC","Ascari"},{"AST","Aston Martin"},{"ATS","ATS"},{"AUD","Audi"},{"AUS","Austin"},{"AZM","Autozam"},{"BAC","BAC"},{"BEN","Bentley"},
+        {"BM","Bertone"},{"BMW","BMW"},{"BOW","Bowler"},{"BRA","Brabham"},{"BUG","Bugatti"},{"BUI","Buick"},{"CAD","Cadillac"},{"CAN","Can-Am"},{"CAT","Caterham"},{"CHE","Chevrolet"},{"CHR","Chrysler"},
+        {"CIT","DS"},{"CUP","CUPRA"},{"CZI","Czinger"},{"DAT","Datsun"},{"DEL","DeLorean"},{"DET","De Tomaso"},{"DOD","Dodge"},{"DON","Donkervoort"},{"EAE","Eagle"},
+        {"ELM","Elemental"},{"EUN","Eunos"},{"EXO","Exomotive"},{"FAF","Fast and Furious"},{"FER","Ferrari"},{"FIA","Fiat"},{"FOR","Ford"},{"FUN","Funco"},{"GIN","Ginetta"},
+        {"GMA","Gordon Murray"},{"GMC","GMC"},{"GTA","Spania GTA"},{"HEN","Hennessey"},{"HOL","Holden"},{"HON","Honda"},{"HOT","Hot Wheels"},{"HUD","Hudson"},{"HUM","HUMMER"},{"HYU","Hyundai"},
+        {"INF","Infiniti"},{"INT","International"},{"ITA","Italdesign"},{"JAG","Jaguar"},{"JEE","Jeep"},{"JIM","Jimco"},{"KIA","Kia"},{"KOE","Koenigsegg"},{"KTM","KTM"},
+        {"LAM","Lamborghini"},{"LAN","Lancia"},{"LEG","LEGO"},{"LEX","Lexus"},{"LIN","Lincoln"},{"LOC","Local Motors"},{"LOL","Lola"},{"LOT","Lotus"},{"LR","Land Rover"},{"LUC","Lucid"},
+        {"LYN","Lynk & Co"},{"MAS","Maserati"},{"MAZ","Mazda"},{"MCL","McLaren"},{"MER","Mercedes-Benz"},{"MEY","Meyers Manx"},{"MG","MG"},{"MIN","Mini"},{"MIT","Mitsubishi"},
+        {"MOR","Morgan"},{"MOS","Mosler"},{"MRC","Mercury"},{"MRS","Morris"},{"NAP","Napier"},{"NIO","NIO"},{"NIS","Nissan"},{"NOB","Noble"},{"NSH","Hot Wheels"},
+        {"NUL","Test Car"},{"OLD","Oldsmobile"},{"OPE","Opel"},{"PAG","Pagani"},{"PEE","Peel"},{"PEN","Penhall"},{"PEU","Peugeot"},{"PG","Playground"},{"PIN","Automobili Pininfarina"},
+        {"PLY","Plymouth"},{"POL","Polaris"},{"PON","Pontiac"},{"POR","Porsche"},{"QDA","Quadra"},{"QUA","Quartz"},{"RAD","Radical"},{"RAE","RAESR"},{"RAM","RAM"},{"REL","Reliant"},{"REN","Renault"},
+        {"RIM","Rimac"},{"RIV","Rivian"},{"RJ","RJ Anderson"},{"ROL","Rolls-Royce"},{"ROS","Rossion"},{"ROV","Rover"},{"SAL","Saleen"},{"SHE","Shelby"},{"SIE","Sierra"},{"SPE","Hot Wheels"},{"SPK","Extreme E"},
+        {"STU","Studebaker"},{"SUB","Subaru"},{"SUN","Sunbeam"},{"TAL","Talbot"},{"TAT","TAMO"},{"TES","Tesla"},{"TG","Top Gear"},{"TOY","Toyota"},{"TRI","Triumph"},{"TVR","TVR"},{"ULT","Ultima"},{"VAU","Vauxhall"},{"VIP","SRT"},{"VOL","Volvo"},{"VUH","VUHL"},{"VW","Volkswagen"},{"WM","W Motors"},
+        {"WUL","Wuling"},{"XPE","Xpeng"},{"ZEN","Zenvo"},
     };
     static string Spacify(string s)
     {
@@ -154,6 +155,8 @@ public partial class CarEditorView : UserControl
     readonly HashSet<long> _modifiedCars = new();     // cars that differ from the embedded clean stock reference
     Dictionary<long, long> _loadedBaseCosts = new(); // exact price snapshot for the Revert prices button
     readonly Dictionary<long, HandlingSnapshot> _handlingSnapshots = new();
+    readonly Dictionary<long, long> _engManufCache = new();
+    readonly Dictionary<long, long> _motorManufCache = new();
     List<CarItem> _cars = new();
     List<EngItem> _engines = new();
     List<MotorItem> _motors = new();
@@ -177,7 +180,8 @@ public partial class CarEditorView : UserControl
         "List_UpgradeAntiSwayFront", "List_UpgradeAntiSwayRear", "List_UpgradeBrakes",
         "List_UpgradeCarBody", "List_UpgradeDrivetrain", "List_UpgradeEngine", "List_UpgradeMotor",
         "List_UpgradeRearWing", "List_UpgradeRimSizeFront", "List_UpgradeRimSizeRear",
-        "List_UpgradeSpringDamper", "List_UpgradeTireCompound", "UpgradePresetPackages"
+        "List_UpgradeSpringDamper", "List_UpgradeTireCompound", "UpgradePresetPackages",
+        "Combo_Colors", "Combo_Colors_Exceptions", "StripeColors", "List_AllBodyKits", "EliminatorUpgradePresetPackages"
     };
     static readonly (string Table, string Column)[] BodyTables =
     {
@@ -578,6 +582,8 @@ public partial class CarEditorView : UserControl
         _batchSuppressedLogs = 0;
         _batchWarnings.Clear();
         _batchBodyUpgradeIds.Clear();
+        bool isEngineBatch = actionName is "add every engine" or "add engines by make" or "add engines by type";
+        bool isMotorBatch = actionName is "add every motor";
         try
         {
             if (groupWrites)
@@ -585,6 +591,8 @@ public partial class CarEditorView : UserControl
                 Exec("SAVEPOINT batch_car_edits");
                 savepointOpen = true;
             }
+            if (isEngineBatch) Exec("CREATE INDEX IF NOT EXISTS temp_UpgradeEngine_Ordinal ON List_UpgradeEngine(Ordinal)");
+            if (isMotorBatch) Exec("CREATE INDEX IF NOT EXISTS temp_UpgradeMotor_Ordinal ON List_UpgradeMotor(Ordinal)");
             Status.Text = $"Batch {actionName}: 0/{targets.Count} cars…";
             ApplyOptionsBtn.Content = $"Working… 0/{targets.Count}";
             await Dispatcher.Yield(DispatcherPriority.Background);
@@ -635,7 +643,7 @@ public partial class CarEditorView : UserControl
                 // lets WPF repaint between cars without cross-thread control or
                 // SQLite-connection access, while the outer savepoint removes
                 // per-row autocommit overhead.
-                if (done < targets.Count)
+                if (done < targets.Count && (targets.Count <= 10 || done % 5 == 0))
                     await Dispatcher.Yield(DispatcherPriority.Background);
             }
             if (savepointOpen)
@@ -677,6 +685,8 @@ public partial class CarEditorView : UserControl
         }
         finally
         {
+            if (isEngineBatch) try { Exec("DROP INDEX IF EXISTS temp_UpgradeEngine_Ordinal"); } catch { }
+            if (isMotorBatch) try { Exec("DROP INDEX IF EXISTS temp_UpgradeMotor_Ordinal"); } catch { }
             timer.Stop();
             _batchRunning = false;
             _batchSummarizeLogs = false;
@@ -940,7 +950,7 @@ public partial class CarEditorView : UserControl
         var d = new OpenFileDialog
         {
             Title = "Load a GameDB SLT or SQLite database",
-            Filter = "GameDB / SQLite (*.slt;*.sqlite;*.db)|*.slt;*.sqlite;*.db|All files|*.*"
+            Filter = "GameDB / SQLite (*.slt;*.~b1;*.sqlite;*.db)|*.slt;*.~b1;*.sqlite;*.db|All files|*.*"
         };
         if (d.ShowDialog() != true) return;
         LoadDatabase(d.FileName);
@@ -964,7 +974,7 @@ public partial class CarEditorView : UserControl
             _workPath = newWorkPath;
             Open();
             bool slt = GameDbSqliteBridge.IsSlt(_origPath);
-            OutName.Text = Path.GetFileNameWithoutExtension(_origPath) + "_modified" + (slt ? ".slt" : ".sqlite");
+            OutName.Text = Path.GetFileNameWithoutExtension(_origPath) + "_modified" + (slt ? GameDbSqliteBridge.SltExtension(_origPath) : ".sqlite");
             ExportBtn.Content = slt ? "⬇  Export SLT" : "⬇  Export DB";
             Log($"loaded {_origPath}", "ok");
             DeleteWorkingFiles(previousWorkPath);
@@ -1052,6 +1062,8 @@ public partial class CarEditorView : UserControl
         _batchBodyUpgradeIds.Clear();
         _modifiedCars.Clear();
         _handlingSnapshots.Clear();
+        _engManufCache.Clear();
+        _motorManufCache.Clear();
 
         _updatingCarSelection = true;
         try
@@ -1085,6 +1097,7 @@ public partial class CarEditorView : UserControl
             BestHandlingBtn.IsEnabled = RevertHandlingBtn.IsEnabled = false;
         OptAutoshow.IsChecked = false;
         OptAutoshow.IsEnabled = false;
+        ResetTrafficCarsState();
         _loadedCarReleaseDates.Clear();
         SetCarReleaseDateUnavailable("Select a car to see its scheduled release date.");
         OptRims.IsChecked = OptWidth.IsChecked = OptAspect.IsChecked = OptTrack.IsChecked = OptFmTrack.IsChecked = false;
@@ -1119,8 +1132,13 @@ public partial class CarEditorView : UserControl
         LoadCarBuckets();
         CaptureCarReleaseDates();
         Exec("PRAGMA foreign_keys=OFF");
+        Exec("PRAGMA temp_store=MEMORY");
+        Exec("PRAGMA cache_size=-131072"); // 128 MB RAM cache
+        Exec("PRAGMA mmap_size=268435456"); // 256 MB memory-mapped I/O
+        Exec("PRAGMA synchronous=NORMAL");
         AttachStockReference();
         IndexDb();
+        CaptureTrafficCarsState();
         LoadStockEngineNames();
         FiltModified.IsEnabled = _stockReferenceAttached;
         if (_stockReferenceAttached) RefreshModifiedCarsFromReference();
@@ -1194,10 +1212,14 @@ public partial class CarEditorView : UserControl
         try
         {
             bool sourceSlt = GameDbSqliteBridge.IsSlt(_origPath);
+            string sltExt = GameDbSqliteBridge.SltExtension(_origPath);
+            string filter = sltExt == ".~b1"
+                ? "Encrypted FH3 GameDB (*.~b1;*.slt)|*.~b1;*.slt|SQLite DB (*.sqlite)|*.sqlite|All files|*.*"
+                : "GameDB (*.slt;*.~b1)|*.slt;*.~b1|SQLite DB (*.sqlite)|*.sqlite|All files|*.*";
             var d = new SaveFileDialog
             {
                 FileName = OutName.Text,
-                Filter = "GameDB (*.slt)|*.slt|SQLite DB (*.sqlite)|*.sqlite|All files|*.*",
+                Filter = filter,
                 FilterIndex = sourceSlt ? 1 : 2,
                 AddExtension = true
             };
@@ -1208,8 +1230,8 @@ public partial class CarEditorView : UserControl
             {
                 var templatePicker = new OpenFileDialog
                 {
-                    Title = "Select the original encrypted GameDB .slt as the template",
-                    Filter = "Encrypted GameDB (*.slt)|*.slt"
+                    Title = "Select the original encrypted GameDB template",
+                    Filter = "Encrypted GameDB (*.slt;*.~b1)|*.slt;*.~b1|All files|*.*"
                 };
                 if (templatePicker.ShowDialog() != true) return;
                 template = templatePicker.FileName;
@@ -1296,6 +1318,7 @@ public partial class CarEditorView : UserControl
     static readonly HashSet<string> OptionalUpgradeColumns = new(StringComparer.OrdinalIgnoreCase)
     {
         "releaseOrder", "UseBlowOffDamper", "PreloadAndDroopDamperID", "SteeringSettingsProfileID",
+        "SteerMaxAngle", "SteerMaxAngleFiltered",
         "FrontTirePressure", "RearTirePressure", "FrontTrackSpacerOffset", "RearTrackSpacerOffset"
     };
 
@@ -1462,9 +1485,13 @@ public partial class CarEditorView : UserControl
             PopulateBodyTargets(c.Id);
             PrepareBatchFitmentTemplate();
             PopulateBatchPowerBuilder(selected);
-            bool[] autoshow = selected.Select(x => HasAutoshow && (ScalarL("SELECT NotAvailableInAutoshow FROM Data_Car WHERE Id=?", x.Id) ?? 1) == 0).ToArray();
+            bool canToggleBatch = CanToggleAutoshow(selected);
+            bool[] autoshow = selected.Select(x => IsCarAvailableInAutoshowUi(x.Id)).ToArray();
+            OptAutoshow.IsEnabled = canToggleBatch;
             OptAutoshow.IsThreeState = true;
-            OptAutoshow.IsChecked = autoshow.All(x => x) ? true : autoshow.All(x => !x) ? false : null;
+            OptAutoshow.IsChecked = canToggleBatch
+                ? (autoshow.All(x => x) ? true : autoshow.All(x => !x) ? false : null)
+                : false;
             CarInfo.Text = $"BATCH MODE    {selected.Count} cars selected\n" +
                            $"Primary       {Naming.Friendly(c.Media)}\n\n" +
                            "The controls use the primary car as a template.\n" +
@@ -1504,7 +1531,12 @@ public partial class CarEditorView : UserControl
         var dc = Query($"SELECT DriveTypeID,NumGears,Displacement,TireBrandID,{availability} FROM Data_Car WHERE Id=?", c.Id).FirstOrDefault();
         string dt = dc == null ? "?" : (Convert.ToInt64(dc["DriveTypeID"]) switch { 1 => "FWD", 2 => "RWD", 3 => "AWD", _ => "?" });
         string se = stock.Count > 0 && stock[0]["n"] != null ? (string)stock[0]["n"] : "— (electric)";
-        bool inShow = dc != null && Convert.ToInt64(dc["NotAvailableInAutoshow"] ?? 0L) == 0;
+        bool isTraffic = IsTrafficCarId(c.Id);
+        bool canToggle = HasAutoshow || (IsFh2 && isTraffic);
+        bool inShow = IsCarAvailableInAutoshowUi(c.Id);
+        string autoshowText = canToggle
+            ? (inShow ? (isTraffic ? "yes (traffic)" : "yes") : (isTraffic ? "no (traffic)" : "no"))
+            : "no supported availability field";
         CarInfo.Text =
             $"Type          {c.Type}{(c.Type is "EV→ICE" or "ICE→EV" ? "  (converted)" : "")}\n" +
             $"Stock engine  {se}\n" +
@@ -1512,11 +1544,13 @@ public partial class CarEditorView : UserControl
             $"Drive/gears   {dt} · {dc?["NumGears"]}\n" +
             $"Displacement  {dc?["Displacement"]} cc\n" +
             $"Tire brand    {dc?["TireBrandID"]}\n" +
-            $"Autoshow      {(HasAutoshow ? (inShow ? "yes" : "no") : "no supported availability field")}";
+            $"Autoshow      {autoshowText}";
         // reflect current autoshow state without firing the Click handler (Click ≠ programmatic IsChecked)
-        OptAutoshow.IsEnabled = HasAutoshow;
-        OptAutoshow.ToolTip = HasAutoshow ? null : "This schema does not use NotAvailableInAutoshow; content ownership flags are left unchanged.";
-        OptAutoshow.IsChecked = HasAutoshow && inShow;
+        OptAutoshow.IsEnabled = canToggle;
+        OptAutoshow.ToolTip = canToggle
+            ? (isTraffic ? "Unlocks or locks full traffic car Autoshow requirements (bucket, flags, UnobtainableCars, OnDiscContent) while keeping free-roam traffic intact." : null)
+            : "This schema does not use NotAvailableInAutoshow; content ownership flags are left unchanged.";
+        OptAutoshow.IsChecked = canToggle && inShow;
         ShowCarReleaseDate();
         // Manual transmission only makes sense on a car that is currently electric: it must have a stock
         // motor AND no stock engine. That disables it for native ICE, EV→ICE conversions, and any car that
@@ -1942,15 +1976,15 @@ public partial class CarEditorView : UserControl
 
     void Autoshow_Click(object s, RoutedEventArgs e)
     {
-        if (_car == null || !HasAutoshow) return;
-        bool avail = OptAutoshow.IsChecked == true;
+        if (_car == null) return;
         var targets = SelectedCars();
-        foreach (var car in targets)
-            Exec("UPDATE Data_Car SET NotAvailableInAutoshow=? WHERE Id=?", avail ? 0 : 1, car.Id);
+        if (!CanToggleAutoshow(targets)) return;
+        bool avail = OptAutoshow.IsChecked == true;
+        ApplyAutoshowToggleForTargets(targets, avail);
         RefreshModifiedAfterExcludedEdit();
         string subject = targets.Count > 1 ? $"{targets.Count} selected cars" : _car.Media;
         Log(avail ? $"✓ {subject} now show in the Autoshow" : $"{subject} hidden from the Autoshow", avail ? "ok" : "warn");
-        if (targets.Count > 1) PickCar(); else ShowCarInfo();
+        if (targets.Count > 1) PickCar(); else { ShowCarInfo(); ShowCarBucket(); }
     }
 
     void SetFeCarsAutoshowAvailability(bool available)
@@ -1958,7 +1992,7 @@ public partial class CarEditorView : UserControl
         if (_conn == null || !HasAutoshow) return;
         string feCars = @"MediaName GLOB '*FE_[0-9][0-9]'
                                 OR MediaName GLOB '*FE_[0-9][0-9][0-9][0-9]'";
-        if (IsFh5) feCars += " OR MediaName GLOB '*HE_[0-9][0-9]'";
+        if (IsFh3 || IsFh4 || IsFh5) feCars += " OR MediaName GLOB '*HE_[0-9][0-9]' OR MediaName GLOB '*_HE*' OR MediaName GLOB '*_FE*'";
         long total = ScalarL($"SELECT COUNT(*) FROM Data_Car WHERE {feCars}") ?? 0;
         if (total == 0) { Log("no Forza Edition cars found", "warn"); return; }
 
@@ -2767,9 +2801,21 @@ public partial class CarEditorView : UserControl
                 ("List_UpgradeCarBodyTireAspectRatioRear", "CarBodyId", "RearAspectRatio")
             })
             {
-                if ((ScalarL($"SELECT COUNT(*) FROM main.UpgradePresetPackages WHERE \"{presetColumn}\" IN " +
+                string actualCol = HasColumn("UpgradePresetPackages", presetColumn) ? presetColumn :
+                    (presetColumn == "FrontAspectRatio" && HasColumn("UpgradePresetPackages", "FrontTireAspectRatioOffset")) ? "FrontTireAspectRatioOffset" :
+                    (presetColumn == "RearAspectRatio" && HasColumn("UpgradePresetPackages", "RearTireAspectRatioOffset")) ? "RearTireAspectRatioOffset" : null;
+                if (actualCol != null && (ScalarL($"SELECT COUNT(*) FROM main.UpgradePresetPackages WHERE \"{actualCol}\" IN " +
                              $"(SELECT Id FROM main.\"{table}\" WHERE \"{bodyColumn}\"=?)", bodyId) ?? 0) > 0)
                 { Log($"widebody {bodyId} has parts used by an upgrade preset; removal cancelled", "warn"); return; }
+                if (_schema.ContainsKey("EliminatorUpgradePresetPackages"))
+                {
+                    string elimCol = HasColumn("EliminatorUpgradePresetPackages", presetColumn) ? presetColumn :
+                        (presetColumn == "FrontAspectRatio" && HasColumn("EliminatorUpgradePresetPackages", "FrontTireAspectRatioOffset")) ? "FrontTireAspectRatioOffset" :
+                        (presetColumn == "RearAspectRatio" && HasColumn("EliminatorUpgradePresetPackages", "RearTireAspectRatioOffset")) ? "RearTireAspectRatioOffset" : null;
+                    if (elimCol != null && (ScalarL($"SELECT COUNT(*) FROM main.EliminatorUpgradePresetPackages WHERE \"{elimCol}\" IN " +
+                                 $"(SELECT Id FROM main.\"{table}\" WHERE \"{bodyColumn}\"=?)", bodyId) ?? 0) > 0)
+                    { Log($"widebody {bodyId} has parts used by an eliminator upgrade preset; removal cancelled", "warn"); return; }
+                }
             }
         }
 
@@ -3085,42 +3131,155 @@ public partial class CarEditorView : UserControl
             SortUpgradeRowsByValue(ex.Table, "CarBodyId", bodyId, valueColumn);
     }
 
-    long EngManuf(long eid) => ScalarL("SELECT ManufacturerID FROM List_UpgradeEngine WHERE EngineID=? AND IsStock=1 LIMIT 1", eid)
-        ?? 0;
-    string EngName(long eid) => _engines.FirstOrDefault(x => x.Id == eid)?.Name ?? ("#" + eid);
-
-    bool AddEngineSwap(long eid, bool quiet)
+    void WarmEngineManufacturerCache()
     {
-        if (!_engines.Any(engine => engine.Id == eid))
-        { if (!quiet) Log("choose an engine from this game's engine list", "warn"); return false; }
-        var carId = _car.Id;
-        if (_electricSpecCars.Contains(carId))
-        { if (!quiet) Log("set a stock combustion engine before adding engine swaps to an EV", "warn"); return false; }
-        if ((ScalarL("SELECT COUNT(*) FROM List_UpgradeEngine WHERE Ordinal=? AND EngineID=?", carId, eid) ?? 0) > 0)
-        { if (!quiet) Log("already on car: " + EngName(eid), "warn"); return false; }
-        Exec("SAVEPOINT add_engine_swap");
+        if (_engManufCache.Count > 0) return;
         try
         {
-            long id = NextId("List_UpgradeEngine", carId), lvl = NextLevel("List_UpgradeEngine", "Ordinal", carId);
-            InsertUpgrade("List_UpgradeEngine", "Id,Ordinal,Level,EngineID,IsStock,ManufacturerID,Price,MassDiff,WeightDistDiff,DragScale,WindInstabilityScale,releaseOrder",
-                id, carId, lvl, eid, 0, EngManuf(eid), 50, 0, 0, 1, 1, 0);
-            Exec("RELEASE add_engine_swap");
+            var rows = Query("SELECT EngineID, ManufacturerID FROM List_UpgradeEngine WHERE IsStock=1 GROUP BY EngineID");
+            foreach (var r in rows)
+            {
+                if (r.TryGetValue("EngineID", out var eid) && eid != null &&
+                    r.TryGetValue("ManufacturerID", out var mid) && mid != null)
+                {
+                    _engManufCache[Convert.ToInt64(eid)] = Convert.ToInt64(mid);
+                }
+            }
+        }
+        catch { }
+    }
+
+    long EngManuf(long eid)
+    {
+        if (_engManufCache.TryGetValue(eid, out var cached)) return cached;
+        long m = ScalarL("SELECT ManufacturerID FROM List_UpgradeEngine WHERE EngineID=? AND IsStock=1 LIMIT 1", eid) ?? 0;
+        _engManufCache[eid] = m;
+        return m;
+    }
+
+    string EngName(long eid) => _engines.FirstOrDefault(x => x.Id == eid)?.Name ?? ("#" + eid);
+
+    int AddEngineSwaps(IEnumerable<long> engineIds, bool quiet = false)
+    {
+        if (_car == null)
+        {
+            if (!quiet) Log("pick a car first", "warn");
+            return 0;
+        }
+        long carId = _car.Id;
+        if (_electricSpecCars.Contains(carId))
+        {
+            if (!quiet) Log("set a stock combustion engine before adding engine swaps to an EV", "warn");
+            return 0;
+        }
+
+        var validEngineSet = _engines.Select(e => e.Id).ToHashSet();
+        var candidateIds = engineIds.Where(id => validEngineSet.Contains(id)).Distinct().ToList();
+        if (candidateIds.Count == 0)
+        {
+            if (!quiet) Log("choose an engine from this game's engine list", "warn");
+            return 0;
+        }
+
+        var existingEngines = new HashSet<long>();
+        using (var checkCmd = _conn.CreateCommand())
+        {
+            checkCmd.CommandText = "SELECT EngineID FROM List_UpgradeEngine WHERE Ordinal=$carId";
+            checkCmd.Parameters.AddWithValue("$carId", carId);
+            using var r = checkCmd.ExecuteReader();
+            while (r.Read()) existingEngines.Add(r.GetInt64(0));
+        }
+
+        var toAdd = candidateIds.Where(id => !existingEngines.Contains(id)).ToList();
+        if (toAdd.Count == 0)
+        {
+            if (!quiet)
+            {
+                if (candidateIds.Count == 1)
+                    Log("already on car: " + EngName(candidateIds[0]), "warn");
+                else
+                    Log("all selected engines are already on this car", "info");
+            }
+            return 0;
+        }
+
+        WarmEngineManufacturerCache();
+
+        long nextId = NextId("List_UpgradeEngine", carId);
+        long nextLevel = NextLevel("List_UpgradeEngine", "Ordinal", carId);
+
+        bool hasCarPoint = HasColumn("List_UpgradeEngine", "CarPoint");
+        bool hasReleaseOrder = HasColumn("List_UpgradeEngine", "releaseOrder");
+
+        var colNames = new List<string> { "Id", "Ordinal", "Level", "EngineID", "IsStock", "ManufacturerID", "Price", "MassDiff", "WeightDistDiff", "DragScale", "WindInstabilityScale" };
+        var valNames = new List<string> { "$id", "$ord", "$lvl", "$eid", "0", "$manuf", "50", "0", "0", "1", "1" };
+        if (hasCarPoint)
+        {
+            colNames.Add("CarPoint");
+            valNames.Add("0");
+        }
+        if (hasReleaseOrder)
+        {
+            colNames.Add("releaseOrder");
+            valNames.Add("0");
+        }
+        string insertSql = $"INSERT INTO \"List_UpgradeEngine\" ({string.Join(",", colNames.Select(c => $"\"{c}\""))}) VALUES ({string.Join(",", valNames)})";
+
+        bool ownSavepoint = !_batchRunning;
+        if (ownSavepoint) Exec("SAVEPOINT add_engine_swaps");
+        try
+        {
+            using var cmd = _conn.CreateCommand();
+            cmd.CommandText = insertSql;
+            var pId = cmd.Parameters.Add("$id", SqliteType.Integer);
+            cmd.Parameters.AddWithValue("$ord", carId);
+            var pLvl = cmd.Parameters.Add("$lvl", SqliteType.Integer);
+            var pEid = cmd.Parameters.Add("$eid", SqliteType.Integer);
+            var pManuf = cmd.Parameters.Add("$manuf", SqliteType.Integer);
+
+            foreach (var eid in toAdd)
+            {
+                if (nextId >= carId * 1000 + 1000)
+                    throw new UpgradeIdExhaustedException($"no free upgrade ID remains for car {carId} in List_UpgradeEngine", "List_UpgradeEngine");
+
+                pId.Value = nextId++;
+                pLvl.Value = nextLevel++;
+                pEid.Value = eid;
+                pManuf.Value = EngManuf(eid);
+                cmd.ExecuteNonQuery();
+            }
+
+            if (ownSavepoint) Exec("RELEASE add_engine_swaps");
         }
         catch
         {
-            Exec("ROLLBACK TO add_engine_swap"); Exec("RELEASE add_engine_swap"); throw;
+            if (ownSavepoint)
+            {
+                try { Exec("ROLLBACK TO add_engine_swaps"); Exec("RELEASE add_engine_swaps"); } catch { }
+            }
+            throw;
         }
+
         MarkModified(carId);
-        if (!quiet) Log("＋ swap added: " + EngName(eid), "ok");
-        return true;
+        if (!quiet)
+        {
+            if (toAdd.Count == 1)
+                Log("＋ swap added: " + EngName(toAdd[0]), "ok");
+            else
+                Log($"＋ added {toAdd.Count} engine swap{(toAdd.Count == 1 ? "" : "s")}", "ok");
+        }
+        return toAdd.Count;
     }
+
+    bool AddEngineSwap(long eid, bool quiet) => AddEngineSwaps(new[] { eid }, quiet) > 0;
+
     void AddAllMake()
     {
         if (_car == null) { Log("pick a car first", "warn"); return; }
         if (_electricSpecCars.Contains(_car.Id)) { Log("convert this EV to combustion before adding engine swaps", "warn"); return; }
         var mk = MakeFilter.SelectedIndex > 0 ? (string)MakeFilter.SelectedItem : "";
         if (mk.Length == 0) { Log("choose a make first", "warn"); return; }
-        int n = 0; foreach (var en in _engines.Where(en => en.Media.Split('_')[0] == mk)) if (AddEngineSwap(en.Id, true)) n++;
+        int n = AddEngineSwaps(_engines.Where(en => en.Media.Split('_')[0] == mk).Select(en => en.Id), quiet: true);
         Log($"＋ added {n} {mk} engines", "ok"); RefreshCar();
     }
     void AddAllType()
@@ -3131,9 +3290,7 @@ public partial class CarEditorView : UserControl
         if (string.IsNullOrEmpty(type)) { Log("choose an engine type first (I4, I6, V6, V8, etc.)", "warn"); return; }
 
         var matches = _engines.Where(en => en.EngType == type).ToArray();
-        int added = 0;
-        foreach (var engine in matches)
-            if (AddEngineSwap(engine.Id, true)) added++;
+        int added = AddEngineSwaps(matches.Select(e => e.Id), quiet: true);
 
         Log($"＋ added {added} {type} engine{(added == 1 ? "" : "s")} ({matches.Length - added} already on car)", "ok");
         RefreshCar();
@@ -3144,7 +3301,8 @@ public partial class CarEditorView : UserControl
         if (_car == null) { Log("pick a car first", "warn"); return; }
         if (_electricSpecCars.Contains(_car.Id)) { Log("convert this EV to combustion before adding engine swaps", "warn"); return; }
         if (!_batchRunning && MessageBox.Show($"Add every engine in the game ({_engines.Count}) to this car?", "Confirm", MessageBoxButton.YesNo) != MessageBoxResult.Yes) return;
-        int n = 0; foreach (var en in _engines) if (AddEngineSwap(en.Id, true)) n++;
+        EnsureAllEnginesHaveUpgrades();
+        int n = AddEngineSwaps(_engines.Select(e => e.Id), quiet: true);
         Log($"＋ added {n} engines (all)", "ok"); RefreshCar();
     }
 
@@ -3178,16 +3336,17 @@ public partial class CarEditorView : UserControl
                 Exec("UPDATE Data_Car SET EngineConfigID=?,CylinderID=? WHERE Id=?", de["ConfigID"], de["CylinderID"], carId);
             }
 
-            long? existingLink = ScalarL("SELECT Id FROM List_UpgradeEngine WHERE Ordinal=? AND EngineID=? ORDER BY IsStock DESC,Id LIMIT 1", carId, eid);
-            Exec("DELETE FROM List_UpgradeEngine WHERE Ordinal=? AND IsStock=1 AND EngineID<>?", carId, eid);
-            if (existingLink.HasValue)
-                Exec("UPDATE List_UpgradeEngine SET IsStock=1,Level=0,Price=0 WHERE Id=?", existingLink.Value);
+            long stockId = carId * 1000;
+            Exec("DELETE FROM List_UpgradeEngine WHERE Ordinal=? AND EngineID=? AND Id<>?", carId, eid, stockId);
+            Exec("DELETE FROM List_UpgradeEngine WHERE Ordinal=? AND IsStock=1 AND Id<>?", carId, stockId);
+            long? stockRowExists = ScalarL("SELECT COUNT(*) FROM List_UpgradeEngine WHERE Id=?", stockId);
+            if (stockRowExists > 0)
+                Exec("UPDATE List_UpgradeEngine SET EngineID=?,IsStock=1,Level=0,Price=0,ManufacturerID=? WHERE Id=?", eid, manufacturer, stockId);
             else
-            {
-                long id = NextId("List_UpgradeEngine", carId);
                 InsertUpgrade("List_UpgradeEngine", "Id,Ordinal,Level,EngineID,IsStock,ManufacturerID,Price,MassDiff,WeightDistDiff,DragScale,WindInstabilityScale,releaseOrder",
-                    id, carId, 0, eid, 1, manufacturer, 0, 0, 0, 1, 1, 0);
-            }
+                    stockId, carId, 0, eid, 1, manufacturer, 0, 0, 0, 1, 1, 0);
+            EnsureEngineUpgrades(eid);
+
             // ICE and EV menus are mutually exclusive, including non-stock swap options.
             Exec("DELETE FROM List_UpgradeMotor WHERE Ordinal=?", carId);
             if (repairCombustionDrivetrains)
@@ -3223,28 +3382,313 @@ public partial class CarEditorView : UserControl
         }
     }
 
-    // add a motor as a selectable (non-stock) swap option in the car's motor menu
-    bool AddMotorOption(long motorId, bool quiet = false)
+    int EnsureEngineUpgrades(long engineId)
     {
-        if (_car == null) { if (!quiet) Log("pick a car first", "warn"); return false; }
+        string[] tables =
+        {
+            "List_UpgradeEngineExhaust",
+            "List_UpgradeEngineIntake",
+            "List_UpgradeEngineFuelSystem",
+            "List_UpgradeEngineIgnition",
+            "List_UpgradeEngineValves",
+            "List_UpgradeEnginePistonsCompression",
+            "List_UpgradeEngineDisplacement",
+            "List_UpgradeEngineFlywheel",
+            "List_UpgradeEngineOilCooling",
+            "List_UpgradeEngineCamshaft"
+        };
+
+        int added = 0;
+        foreach (var t in tables)
+        {
+            if (!_schema.ContainsKey(t)) continue;
+
+            long? nonStock = ScalarL($"SELECT COUNT(*) FROM \"{t}\" WHERE EngineID=? AND IsStock=0", engineId);
+            if (nonStock > 0) continue;
+
+            var stockRow = Query($"SELECT * FROM \"{t}\" WHERE EngineID=? ORDER BY IsStock DESC, Level DESC LIMIT 1", engineId).FirstOrDefault();
+            if (stockRow == null) continue;
+
+            long stockId = engineId * 1000;
+            Exec($"UPDATE \"{t}\" SET Level=0, IsStock=1, Price=0 WHERE EngineID=? AND (IsStock=1 OR Id=?)", engineId, stockId);
+
+            for (int lvl = 1; lvl <= 3; lvl++)
+            {
+                long newId = engineId * 1000 + lvl;
+                if ((ScalarL($"SELECT COUNT(*) FROM \"{t}\" WHERE Id=?", newId) ?? 0) > 0) continue;
+
+                var newRow = new Dictionary<string, object>(stockRow);
+                newRow["Id"] = newId;
+                newRow["Level"] = (long)lvl;
+                newRow["IsStock"] = 0L;
+                newRow["ManufacturerID"] = 25L;
+
+                if (t == "List_UpgradeEngineExhaust")
+                {
+                    newRow["Price"] = lvl == 1 ? 1350L : (lvl == 2 ? 2050L : 3500L);
+                    newRow["TorqueScale"] = 1.0 + 0.022 * lvl;
+                    newRow["MassDiff"] = lvl == 1 ? -5.0 : (lvl == 2 ? -10.0 : -20.0);
+                }
+                else if (t == "List_UpgradeEngineIntake")
+                {
+                    newRow["Price"] = lvl == 1 ? 600L : (lvl == 2 ? 1200L : 1800L);
+                    newRow["TorqueScale"] = 1.0 + 0.014 * lvl;
+                    newRow["MassDiff"] = lvl == 1 ? 0.0 : (lvl == 2 ? -1.5 : -3.0);
+                }
+                else if (t == "List_UpgradeEngineFuelSystem")
+                {
+                    newRow["Price"] = lvl == 1 ? 1100L : (lvl == 2 ? 1800L : 2500L);
+                    newRow["TorqueScale"] = 1.0 + 0.020 * lvl;
+                }
+                else if (t == "List_UpgradeEngineIgnition")
+                {
+                    newRow["Price"] = lvl == 1 ? 650L : (lvl == 2 ? 1300L : 1950L);
+                    newRow["TorqueScale"] = 1.0 + 0.016 * lvl;
+                }
+                else if (t == "List_UpgradeEngineValves")
+                {
+                    newRow["Price"] = lvl == 1 ? 1200L : (lvl == 2 ? 2500L : 3700L);
+                    newRow["TorqueScale"] = 1.0 + 0.015 * lvl;
+                    newRow["MassDiff"] = lvl == 1 ? -0.1 : (lvl == 2 ? -0.3 : -0.6);
+                }
+                else if (t == "List_UpgradeEnginePistonsCompression")
+                {
+                    newRow["Price"] = lvl == 1 ? 1300L : (lvl == 2 ? 2600L : 3900L);
+                    newRow["TorqueScale"] = 1.0 + 0.018 * lvl;
+                    newRow["MassDiff"] = lvl == 1 ? -0.3 : (lvl == 2 ? -1.2 : -2.4);
+                }
+                else if (t == "List_UpgradeEngineDisplacement" && stockRow.ContainsKey("Disp") && stockRow["Disp"] != null)
+                {
+                    newRow["Price"] = lvl == 1 ? 1300L : (lvl == 2 ? 2600L : 3900L);
+                    newRow["TorqueScale"] = 1.0 + 0.028 * lvl;
+                    long baseDisp = Convert.ToInt64(stockRow["Disp"]);
+                    newRow["Disp"] = (long)Math.Round(baseDisp * (1.0 + 0.028 * lvl));
+                }
+                else if (t == "List_UpgradeEngineFlywheel" && stockRow.ContainsKey("MomentInertia") && stockRow["MomentInertia"] != null)
+                {
+                    newRow["Price"] = lvl == 1 ? 800L : (lvl == 2 ? 1600L : 2400L);
+                    newRow["MassDiff"] = lvl == 1 ? -0.73 : (lvl == 2 ? -1.83 : -3.65);
+                    double baseInertia = Convert.ToDouble(stockRow["MomentInertia"]);
+                    newRow["MomentInertia"] = baseInertia * (lvl == 1 ? 0.9 : (lvl == 2 ? 0.75 : 0.5));
+                }
+                else if (t == "List_UpgradeEngineOilCooling")
+                {
+                    newRow["Price"] = lvl == 1 ? 700L : (lvl == 2 ? 1400L : 2100L);
+                    newRow["TorqueScale"] = 1.0 + 0.009 * lvl;
+                    newRow["MassDiff"] = lvl == 1 ? 1.35 : (lvl == 2 ? 6.74 : 13.48);
+                }
+                else if (t == "List_UpgradeEngineCamshaft")
+                {
+                    newRow["Price"] = lvl == 1 ? 1200L : (lvl == 2 ? 2500L : 3700L);
+                    double baseRedline = stockRow.ContainsKey("RedlineRPM") && stockRow["RedlineRPM"] != null ? Convert.ToDouble(stockRow["RedlineRPM"]) : 6000;
+                    double baseMax = stockRow.ContainsKey("TorqueCurveMaxRPM") && stockRow["TorqueCurveMaxRPM"] != null ? Convert.ToDouble(stockRow["TorqueCurveMaxRPM"]) : 8000;
+                    newRow["RedlineRPM"] = Math.Min(baseRedline + 200.0 * lvl, baseMax);
+                }
+
+                InsertClonedRow(t, newRow);
+                added++;
+            }
+        }
+        return added;
+    }
+
+    int EnsureAllEnginesHaveUpgrades()
+    {
+        var eids = Query("SELECT EngineID FROM Data_Engine").Select(r => Convert.ToInt64(r["EngineID"])).ToList();
+        int fixedCount = 0;
+        foreach (var eid in eids)
+        {
+            if (EnsureEngineUpgrades(eid) > 0) fixedCount++;
+        }
+        return fixedCount;
+    }
+
+    void UnlockEngineUpgrades_Click(object s, RoutedEventArgs e)
+    {
+        _ = RunForSelectedCars("unlock engine upgrades", () =>
+        {
+            Exec("SAVEPOINT unlock_engine_upgrades");
+            try
+            {
+                int fixedCount;
+                if (SelectedCars().Count > 1)
+                {
+                    var engineIds = SelectedCars()
+                        .Select(c => ScalarL("SELECT EngineID FROM List_UpgradeEngine WHERE Ordinal=? AND IsStock=1 LIMIT 1", c.Id))
+                        .Where(id => id.HasValue).Select(id => id.Value).Distinct().ToList();
+                    fixedCount = 0;
+                    foreach (var eid in engineIds)
+                    {
+                        if (EnsureEngineUpgrades(eid) > 0) fixedCount++;
+                    }
+                    Log($"✓ Unlocked engine upgrades for {fixedCount} car engine(s)", "ok");
+                }
+                else
+                {
+                    fixedCount = EnsureAllEnginesHaveUpgrades();
+                    if (fixedCount > 0)
+                        Log($"✓ Unlocked engine upgrades for {fixedCount} engine(s)", "ok");
+                    else
+                        Log("All engines already have upgrade parts available.", "info");
+                }
+                Exec("RELEASE unlock_engine_upgrades");
+                RefreshCar();
+            }
+            catch (Exception ex)
+            {
+                try { Exec("ROLLBACK TO unlock_engine_upgrades"); Exec("RELEASE unlock_engine_upgrades"); } catch { }
+                Log("Failed to unlock engine upgrades: " + ex.Message, "err");
+            }
+        });
+    }
+
+    void WarmMotorManufacturerCache()
+    {
+        if (_motorManufCache.Count > 0) return;
+        try
+        {
+            var rows = Query("SELECT MotorID, ManufacturerID FROM List_UpgradeMotor WHERE IsStock=1 GROUP BY MotorID");
+            foreach (var r in rows)
+            {
+                if (r.TryGetValue("MotorID", out var mid) && mid != null &&
+                    r.TryGetValue("ManufacturerID", out var mfid) && mfid != null)
+                {
+                    _motorManufCache[Convert.ToInt64(mid)] = Convert.ToInt64(mfid);
+                }
+            }
+        }
+        catch { }
+    }
+
+    long MotorManuf(long motorId)
+    {
+        if (_motorManufCache.TryGetValue(motorId, out var cached)) return cached;
+        long m = ScalarL("SELECT ManufacturerID FROM List_UpgradeMotor WHERE MotorID=? AND IsStock=1 LIMIT 1", motorId) ?? 0;
+        _motorManufCache[motorId] = m;
+        return m;
+    }
+
+    // add motors as selectable (non-stock) swap options in the car's motor menu
+    int AddMotorOptions(IEnumerable<long> motorIds, bool quiet = false)
+    {
+        if (_car == null)
+        {
+            if (!quiet) Log("pick a car first", "warn");
+            return 0;
+        }
         long carId = _car.Id;
         if (!_electricSpecCars.Contains(carId))
-        { if (!quiet) Log("convert this ICE car to electric before adding motor options", "warn"); return false; }
-        if ((ScalarL("SELECT COUNT(*) FROM List_UpgradeMotor WHERE Ordinal=? AND MotorID=?", carId, motorId) ?? 0) > 0)
-        { if (!quiet) Log("already on car: " + MotorName(motorId), "warn"); return false; }
-        long id = NextId("List_UpgradeMotor", carId), lvl = NextLevel("List_UpgradeMotor", "Ordinal", carId);
-        long manu = ScalarL("SELECT ManufacturerID FROM List_UpgradeMotor WHERE MotorID=? AND IsStock=1 LIMIT 1", motorId) ?? 0;
-        InsertUpgrade("List_UpgradeMotor", "Id,Ordinal,Level,MotorID,IsStock,ManufacturerID,Price,MassDiff,WeightDistDiff,releaseOrder",
-            id, carId, lvl, motorId, 0, manu, 50, 0, 0, 0);
+        {
+            if (!quiet) Log("convert this ICE car to electric before adding motor options", "warn");
+            return 0;
+        }
+
+        var validMotorSet = _motors.Select(m => m.Id).ToHashSet();
+        var candidateIds = motorIds.Where(id => validMotorSet.Contains(id)).Distinct().ToList();
+        if (candidateIds.Count == 0)
+        {
+            if (!quiet) Log("choose a motor from this game's motor list", "warn");
+            return 0;
+        }
+
+        var existingMotors = new HashSet<long>();
+        using (var checkCmd = _conn.CreateCommand())
+        {
+            checkCmd.CommandText = "SELECT MotorID FROM List_UpgradeMotor WHERE Ordinal=$carId";
+            checkCmd.Parameters.AddWithValue("$carId", carId);
+            using var r = checkCmd.ExecuteReader();
+            while (r.Read()) existingMotors.Add(r.GetInt64(0));
+        }
+
+        var toAdd = candidateIds.Where(id => !existingMotors.Contains(id)).ToList();
+        if (toAdd.Count == 0)
+        {
+            if (!quiet)
+            {
+                if (candidateIds.Count == 1)
+                    Log("already on car: " + MotorName(candidateIds[0]), "warn");
+                else
+                    Log("all selected motors are already on this car", "info");
+            }
+            return 0;
+        }
+
+        WarmMotorManufacturerCache();
+
+        long nextId = NextId("List_UpgradeMotor", carId);
+        long nextLevel = NextLevel("List_UpgradeMotor", "Ordinal", carId);
+
+        bool hasCarPoint = HasColumn("List_UpgradeMotor", "CarPoint");
+        bool hasReleaseOrder = HasColumn("List_UpgradeMotor", "releaseOrder");
+
+        var colNames = new List<string> { "Id", "Ordinal", "Level", "MotorID", "IsStock", "ManufacturerID", "Price", "MassDiff", "WeightDistDiff" };
+        var valNames = new List<string> { "$id", "$ord", "$lvl", "$mid", "0", "$manuf", "50", "0", "0" };
+        if (hasCarPoint)
+        {
+            colNames.Add("CarPoint");
+            valNames.Add("0");
+        }
+        if (hasReleaseOrder)
+        {
+            colNames.Add("releaseOrder");
+            valNames.Add("0");
+        }
+        string insertSql = $"INSERT INTO \"List_UpgradeMotor\" ({string.Join(",", colNames.Select(c => $"\"{c}\""))}) VALUES ({string.Join(",", valNames)})";
+
+        bool ownSavepoint = !_batchRunning;
+        if (ownSavepoint) Exec("SAVEPOINT add_motor_options");
+        try
+        {
+            using var cmd = _conn.CreateCommand();
+            cmd.CommandText = insertSql;
+            var pId = cmd.Parameters.Add("$id", SqliteType.Integer);
+            cmd.Parameters.AddWithValue("$ord", carId);
+            var pLvl = cmd.Parameters.Add("$lvl", SqliteType.Integer);
+            var pMid = cmd.Parameters.Add("$mid", SqliteType.Integer);
+            var pManuf = cmd.Parameters.Add("$manuf", SqliteType.Integer);
+
+            foreach (var mid in toAdd)
+            {
+                if (nextId >= carId * 1000 + 1000)
+                    throw new UpgradeIdExhaustedException($"no free upgrade ID remains for car {carId} in List_UpgradeMotor", "List_UpgradeMotor");
+
+                pId.Value = nextId++;
+                pLvl.Value = nextLevel++;
+                pMid.Value = mid;
+                pManuf.Value = MotorManuf(mid);
+                cmd.ExecuteNonQuery();
+            }
+
+            if (ownSavepoint) Exec("RELEASE add_motor_options");
+        }
+        catch
+        {
+            if (ownSavepoint)
+            {
+                try { Exec("ROLLBACK TO add_motor_options"); Exec("RELEASE add_motor_options"); } catch { }
+            }
+            throw;
+        }
+
         MarkModified(carId);
-        if (!quiet) { Log("＋ motor option added: " + MotorName(motorId), "ok"); RefreshCar(); }
-        return true;
+        if (!quiet)
+        {
+            if (toAdd.Count == 1)
+                Log("＋ motor option added: " + MotorName(toAdd[0]), "ok");
+            else
+                Log($"＋ added {toAdd.Count} motor option{(toAdd.Count == 1 ? "" : "s")}", "ok");
+            RefreshCar();
+        }
+        return toAdd.Count;
     }
+
+    bool AddMotorOption(long motorId, bool quiet = false) => AddMotorOptions(new[] { motorId }, quiet) > 0;
+
     void AddAllMotors()
     {
         if (_car == null) { Log("pick a car first", "warn"); return; }
         if (!_electricSpecCars.Contains(_car.Id)) { Log("convert this ICE car to electric before adding motor options", "warn"); return; }
-        int n = 0; foreach (var mo in _motors) if (AddMotorOption(mo.Id, true)) n++;
+        int n = AddMotorOptions(_motors.Select(m => m.Id), quiet: true);
         Log($"＋ added {n} motor options (all)", "ok"); RefreshCar();
     }
 
@@ -3300,7 +3744,7 @@ public partial class CarEditorView : UserControl
             Exec("DELETE FROM List_UpgradeEngine WHERE Ordinal=?", carId);
             // 3. install the motor as the stock (and only) powertrain
             Exec("DELETE FROM List_UpgradeMotor WHERE Ordinal=?", carId);
-            long mid = NextId("List_UpgradeMotor", carId);
+            long mid = carId * 1000;
             InsertUpgrade("List_UpgradeMotor", "Id,Ordinal,Level,MotorID,IsStock,ManufacturerID,Price,MassDiff,WeightDistDiff,releaseOrder",
                 mid, carId, 0, motorId, 1, manu, 0, 0, 0, 0);
             // 4. fit the EV single-speed drivetrain (RWD/FWD upgrade options can still be added on top via Apply)
@@ -3356,7 +3800,7 @@ public partial class CarEditorView : UserControl
                                                 !ValidateFitmentNumbers(_ofR, "rear track width"))))
                 return;
             double driftSteeringAngle = 0;
-            if (OptSlam.IsChecked == true && (!IsFh2 || OptFh2DriftAngle.IsChecked == true) && !TryGetDriftSteeringAngle(out driftSteeringAngle)) return;
+            if (OptSlam.IsChecked == true && (!(IsFh2 || IsFh3) || OptFh2DriftAngle.IsChecked == true) && !TryGetDriftSteeringAngle(out driftSteeringAngle)) return;
             if (!TryReadWidebodyBaseTrackEdit(out long trackBodyId, out double baseTrackFront,
                     out double baseTrackRear, out bool baseTrackChanged, out string trackReason))
             {
@@ -3369,7 +3813,7 @@ public partial class CarEditorView : UserControl
                 Log("wheelbase must be greater than 0 and at most 50 m; wheelbase position Z must be a finite number", "warn");
                 return;
             }
-            if (IsFh2) { Exec("SAVEPOINT apply_car_options"); savepoint = true; }
+            if (IsFh2 || IsFh3 || IsFh4 || IsFh5 || IsFh6) { Exec("SAVEPOINT apply_car_options"); savepoint = true; }
             if (baseTrackChanged)
             {
                 int updated = Exec("UPDATE Data_CarBody SET ModelFrontTrackOuter=?,ModelRearTrackOuter=? WHERE Id=?",
@@ -3389,7 +3833,7 @@ public partial class CarEditorView : UserControl
             {
                 if ((ScalarL("SELECT COUNT(*) FROM List_UpgradeDrivetrain WHERE Ordinal=? AND IsStock=0 AND DrivetrainID=2170", carId) ?? 0) > 0)
                     Log("RWD conversion already present — no duplicate added", "info");
-                else if (IsFh2 || IsFh5)
+                else if (IsFh2 || IsFh3 || IsFh4 || IsFh5)
                     AddNativeHorizonRwdConversion(carId);
                 else if ((ScalarL("SELECT COUNT(*) FROM Data_Drivetrain WHERE DrivetrainID=2170") ?? 0) > 0)
                 {
@@ -3662,7 +4106,7 @@ public partial class CarEditorView : UserControl
 
             if (OptSlam.IsChecked == true)
             {
-                if (IsFh2) ApplyFh2DriftSuspension(carId, OptFh2DriftAngle.IsChecked == true ? driftSteeringAngle : null);
+                if (IsFh2 || IsFh3) ApplyFh2DriftSuspension(carId, OptFh2DriftAngle.IsChecked == true ? driftSteeringAngle : null);
                 else ApplySuspensionLimitRemoval(carId, 5, driftSteeringAngle);
             }
 
@@ -4035,13 +4479,13 @@ public partial class CarEditorView : UserControl
             stock["FrontSpringDamperPhysicsID"] = frontId;
             stock["RearSpringDamperPhysicsID"] = rearId;
             stock["PreloadAndDroopDamperID"] = level == 4 ? 1L : 0L;
-            if (level == 3 && !IsFh2)
+            if (level == 3 && HasColumn("List_UpgradeSpringDamper", "SteerMaxAngle"))
             {
                 stock["SteerMaxAngle"] = 37d;
                 stock["SteerMaxAngleFiltered"] = 29d;
                 stock["SteeringSettingsProfileID"] = 5L;
             }
-            else if (level == 5 && !IsFh2)
+            else if (level == 5 && HasColumn("List_UpgradeSpringDamper", "SteerMaxAngle"))
             {
                 stock["SteerMaxAngle"] = 50d;
                 stock["SteerMaxAngleFiltered"] = 50d;
@@ -4170,7 +4614,7 @@ public partial class CarEditorView : UserControl
 
     void ApplyWhitewalls(long carId)
     {
-        if (IsFh2 || IsFh5) { ApplyNativeHorizonWhitewalls(carId); return; }
+        if (IsFh2 || IsFh3 || IsFh4 || IsFh5) { ApplyNativeHorizonWhitewalls(carId); return; }
         long? refCar = ScalarL("SELECT Ordinal FROM List_UpgradeTireCompound WHERE TireModelName='Vintage_WhiteWall' LIMIT 1");
         if (refCar == null) { Log("whitewalls skipped: no reference car with Vintage_WhiteWall", "warn"); return; }
         Exec("UPDATE Data_Car SET TireBrandID=4 WHERE Id=?", carId);
@@ -4194,7 +4638,9 @@ public partial class CarEditorView : UserControl
 
     void ApplyFeTires(long carId)
     {
-        string match = IsFh5 ? "lower(TireModelName) GLOB '*_horizonedition'" : "TireModelName GLOB '*_FE'";
+        string match = (IsFh3 || IsFh4 || IsFh5)
+            ? "(lower(TireModelName) GLOB '*_horizonedition' OR lower(TireModelName) GLOB '*_horizon')"
+            : "TireModelName GLOB '*_FE'";
         long? refCar = ScalarL($@"SELECT Ordinal FROM List_UpgradeTireCompound
                                  WHERE {match}
                                  GROUP BY Ordinal ORDER BY COUNT(*) DESC,Ordinal LIMIT 1");

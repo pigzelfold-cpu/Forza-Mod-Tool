@@ -65,7 +65,7 @@ public partial class DbBrowserView : UserControl
     }
     async void Open_Click(object sender, RoutedEventArgs e)
     {
-        var dialog = new OpenFileDialog { Title = "Open database in DB Browser", Filter = "SLT or SQLite database|*.slt;*.sqlite;*.db;*.sqlite3|All files|*.*" };
+        var dialog = new OpenFileDialog { Title = "Open database in DB Browser", Filter = "SLT or SQLite database|*.slt;*.~b1;*.sqlite;*.db;*.sqlite3|All files|*.*" };
         if (dialog.ShowDialog(OwnerWindow) == true) await LoadDatabase(dialog.FileName);
     }
     async Task LoadDatabase(string path)
@@ -259,12 +259,16 @@ public partial class DbBrowserView : UserControl
     async void Export_Click(object sender, RoutedEventArgs e)
     {
         if (_database == null) return; bool slt = GameDbSqliteBridge.IsSlt(_database.SourcePath);
-        var dialog = new SaveFileDialog { Title = "Export a new edited database", Filter = "Encrypted GameDB SLT|*.slt|SQLite database|*.sqlite", FilterIndex = slt ? 1 : 2,
-            FileName = Path.GetFileNameWithoutExtension(_database.SourcePath) + "_browser_modified" + (slt ? ".slt" : ".sqlite"), AddExtension = true, OverwritePrompt = true };
+        string sltExt = GameDbSqliteBridge.SltExtension(_database.SourcePath);
+        string filter = sltExt == ".~b1"
+            ? "Encrypted FH3 GameDB (*.~b1;*.slt)|*.~b1;*.slt|SQLite database (*.sqlite)|*.sqlite"
+            : "Encrypted GameDB SLT (*.slt;*.~b1)|*.slt;*.~b1|SQLite database (*.sqlite)|*.sqlite";
+        var dialog = new SaveFileDialog { Title = "Export a new edited database", Filter = filter, FilterIndex = slt ? 1 : 2,
+            FileName = Path.GetFileNameWithoutExtension(_database.SourcePath) + "_browser_modified" + (slt ? sltExt : ".sqlite"), AddExtension = true, OverwritePrompt = true };
         if (dialog.ShowDialog(OwnerWindow) != true) return;
         string? template = null;
         if (GameDbSqliteBridge.IsSlt(dialog.FileName) && !slt) {
-            var original = new OpenFileDialog { Title = "Choose original encrypted GameDB template", Filter = "Encrypted GameDB|*.slt" };
+            var original = new OpenFileDialog { Title = "Choose original encrypted GameDB template", Filter = "Encrypted GameDB (*.slt;*.~b1)|*.slt;*.~b1|All files|*.*" };
             if (original.ShowDialog(OwnerWindow) != true) return; template = original.FileName;
         }
         await Run("Exporting and validating new database…", async _ => {

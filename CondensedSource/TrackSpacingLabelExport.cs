@@ -203,14 +203,14 @@ internal sealed class TrackSpacingLabelExport : IDisposable
         int added = 0;
         foreach (string directory in Directory.EnumerateDirectories(folder))
         {
-            string lang = Path.GetFileName(directory), file = Path.Combine(directory, "Upgrades.str");
+            string lang = Path.GetFileName(directory).ToUpperInvariant(), file = Path.Combine(directory, "Upgrades.str");
             if (!ValidLanguage(lang) || resolved.Contains(lang) || !File.Exists(file)) continue;
             baselines[lang] = ReadInstalledTable(file, game, archive: false)!;
             resolved.Add(lang); added++;
         }
         foreach (string zipPath in Directory.EnumerateFiles(folder, "*.zip"))
         {
-            string lang = Path.GetFileNameWithoutExtension(zipPath);
+            string lang = Path.GetFileNameWithoutExtension(zipPath).ToUpperInvariant();
             if (!ValidLanguage(lang) || resolved.Contains(lang)) continue;
             if (ReadInstalledTable(zipPath, game, archive: true) is not Baseline table) continue;
             baselines[lang] = table;

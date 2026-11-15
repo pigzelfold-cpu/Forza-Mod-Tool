@@ -76,11 +76,12 @@ public static class ProfileConsumableState
         var records = container?.Career?.Records.Where(r => r.Name == "CarPerkSaveState").ToArray();
         if (records is not { Length: 1 } || records[0].Serializer != "CarPerkSaveState") return false;
         byte[] b = records[0].Payload;
-        // Observed serializer version 1: version, skill score, raw score remainder,
+        // Observed serializer version 1 (FH6) and version 4 (FH5): version, skill score, raw score remainder,
         // spendable tokens, notification bool, best combo, then the mastery map.
         // Validate every mirrored header field, not a search for the current number.
         // The entire mastery-map tail remains opaque and byte-for-byte unchanged.
-        if (b.Length < 25 || BinaryPrimitives.ReadUInt32LittleEndian(b) != 1 || b[16] > 1) return false;
+        uint version = BinaryPrimitives.ReadUInt32LittleEndian(b);
+        if (b.Length < 25 || (version != 1 && version != 4) || b[16] > 1) return false;
         uint entries = BinaryPrimitives.ReadUInt32LittleEndian(b.AsSpan(21));
         if (entries > 100_000 || entries > b.Length - 25 || (entries == 0 && b.Length != 25)) return false;
         foreach (var (id, offset) in new[] { ("SkillPointsTotal", 4), ("UnspentSkillPointsTotal", 8), ("CurrentSkillTokensTotal", 12), ("BestSkillsCombo", 17) })
@@ -95,7 +96,8 @@ public static class ProfileConsumableState
                 return false;
             }
         }
-        var seen = parent.Children.Where(n => bx.Strings[n.NameIndex] == "property" && bx.GetAttribute(n, "id") == "SeenCarMasteriesNotification").ToArray();
+        var seen = parent.Children.Where(n => bx.Strings[n.NameIndex] == "property" &&
+            (bx.GetAttribute(n, "id") == "SeenCarMasteriesNotification" || bx.GetAttribute(n, "id") == "SeenCarMasteriesScreen")).ToArray();
         if (seen.Length != 1 || bx.GetAttribute(seen[0], "type") != "bool" || seen[0].Children.Count != 0 ||
             seen[0].Attributes.Count(a => bx.Strings[a.KeyIndex] == "value") != 1 ||
             bx.GetAttribute(seen[0], "value") != (b[16] == 1 ? "true" : "false")) return false;

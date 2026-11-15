@@ -49,8 +49,14 @@ public partial class MainWindow
     }
     private async void BrowseProfileTemplate_Click(object sender,RoutedEventArgs e) {
         if(_cryptoBusy)return;
-        string? path=BrowseProfile("Select the original encrypted FH6 C_ProfileData template");if(path==null)return;
-        try {SetCryptoBusy(true);await Task.Run(()=>ProfileCrypto.ValidateTemplate(path));_templateProfile=path;ProfileTemplateText.Text=path;Log("Validated FH6 profile template set: "+Path.GetFileName(path));Status("Profile template set.");}
+        string? path=BrowseProfile("Select the original encrypted profile template");if(path==null)return;
+        try {
+            SetCryptoBusy(true);
+            if(await TrySetLegacyProfileTemplateAsync(path))return;
+            if(await TrySetFh5ProfileTemplateAsync(path))return;
+            await Task.Run(()=>ProfileCrypto.ValidateTemplate(path));
+            _templateProfile=path;ProfileTemplateText.Text=path;Log("Validated FH6 profile template set: "+Path.GetFileName(path));Status("Profile template set.");
+        }
         catch(Exception ex) {Fail(ex,path);}finally {SetCryptoBusy(false);}
     }
 }

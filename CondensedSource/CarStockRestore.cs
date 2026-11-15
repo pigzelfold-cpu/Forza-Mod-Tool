@@ -52,7 +52,8 @@ internal static class CarStockRestore
         "CarInvalidDefaultParts", "CarInvalidUpgradePackage", "CarPartPositions", "CarVouchersExclusions",
         "CarsDropParts", "FreeRevOverrides", "InAirBehaviourOverride", "List_AeroPhysics",
         "List_AntiSwayPhysics", "List_DrivingMode", "List_SpringDamperPhysics", "LiveryStripes",
-        "PaintableGroupNames", "PaintableGroups", "UnobtainableCars", "UpgradePresetPackages"
+        "PaintableGroupNames", "PaintableGroups", "UnobtainableCars", "UpgradePresetPackages",
+        "Combo_Colors", "Combo_Colors_Exceptions", "StripeColors", "List_AllBodyKits", "EliminatorUpgradePresetPackages"
     };
     static string Q(string value) => '"' + value.Replace("\"", "\"\"") + '"';
     static string Schema(string value) => value is "main" or "stockref" ? value : throw new ArgumentException("Unsupported restore schema.");

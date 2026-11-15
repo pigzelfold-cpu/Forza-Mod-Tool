@@ -9,8 +9,9 @@ internal sealed class ProfileXpEdit(uint driverXp)
     const string OnlineKey = "CurrencyBucket_HorizonOpenXP_HorizonOpenXP";
     // Despite their legacy names, TotalSkills (u64) and WristbandLevel (u32)
     // mirrored the CareerXP sum in all inspected saves and natural XP gains.
-    // Main/Level and Main/TotalXP do not consistently mirror it; preserve them.
-    static readonly string[] DriverPaths = { "/Main/XP", "/Main/TotalSkills", "/CompareStats/WristbandLevel" };
+    // TotalXP (u64) tracks lifetime earned XP displayed in in-game stats; mirror it as well.
+    // Main/Level does not mirror it directly (it represents level within prestige); preserve it.
+    static readonly string[] DriverPaths = { "/Main/XP", "/Main/TotalXP", "/Main/TotalSkills", "/CompareStats/WristbandLevel" };
     sealed record PropertyChange(string Path, ulong Before, ulong After);
     sealed record Bucket(string Key, string Name, string Type, Bxml.Node Total, int Value);
     sealed record BucketChange(Bucket Before, int After);
@@ -24,8 +25,11 @@ internal sealed class ProfileXpEdit(uint driverXp)
         var plan = new ProfileXpEdit(xp);
         foreach (string path in DriverPaths)
         {
-            if (!TryProperty(container, path, out _, out ulong old)) return false;
-            if (old != xp) plan.properties.Add(new(path, old, xp));
+            if (TryProperty(container, path, out _, out ulong old))
+            {
+                if (old != xp) plan.properties.Add(new(path, old, xp));
+            }
+            else if (path == "/Main/XP") return false;
         }
         // CareerXP buckets are the earned-XP ledger. Normal gains rebuild the
         // driver's XP from their sum; changing only Main/XP is temporary.
@@ -74,7 +78,13 @@ internal sealed class ProfileXpEdit(uint driverXp)
         if (!verified.Serialize().AsSpan().SequenceEqual(bytes) || !TryCareerBuckets(verified, out var ledger)
             || ledger.Sum(b => (long)b.Value) != driverXp) return false;
         foreach (string path in DriverPaths)
-            if (!TryProperty(verified, path, out _, out ulong value) || value != driverXp) return false;
+        {
+            if (TryProperty(verified, path, out _, out ulong value))
+            {
+                if (value != driverXp) return false;
+            }
+            else if (path == "/Main/XP") return false;
+        }
         foreach (var change in properties)
             if (!TryProperty(verified, change.Path, out _, out ulong value) || value != change.After) return false;
         foreach (var change in buckets)
@@ -107,7 +117,7 @@ internal sealed class ProfileXpEdit(uint driverXp)
         node = null; value = 0;
         var matches = container?.Properties?.Walk().Where(p => p.Path == path).Select(p => p.Node).ToArray();
         if (matches is not { Length: 1 }) return false;
-        var field = matches[0]; bool wide = path == "/Main/TotalSkills";
+        var field = matches[0]; bool wide = path is "/Main/TotalSkills" or "/Main/TotalXP";
         if (field.IsBag || !field.IsEditable || field.RawValue.Length != (wide ? 8 : 4)
             || (wide ? field.TypeId != 4 : field.TypeId is not (3 or 17))
             || !ulong.TryParse(field.DisplayValue(), NumberStyles.None, CultureInfo.InvariantCulture, out value) || (!wide && value > uint.MaxValue)) return false;

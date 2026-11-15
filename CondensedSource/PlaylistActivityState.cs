@@ -10,7 +10,7 @@ public static partial class PlaylistPointsState
     sealed record SeriesProgress(uint Series, List<SeasonProgress> Seasons);
     sealed record ActivityState(int Start, int End, List<SeriesProgress> Series, Dictionary<uint, (int Maximum, Dictionary<int, int> Tracks)> Maxima);
 
-    static bool TryActivityMaps(byte[] bytes, int contentOffset, Dictionary<uint, Score> scores, out ActivityState? result)
+    static bool TryActivityMaps(byte[] bytes, int contentOffset, Dictionary<uint, Score> scores, uint version, out ActivityState? result)
     {
         result = null;
         try
@@ -45,7 +45,7 @@ public static partial class PlaylistPointsState
                         var entries = new List<ActivityProgress>(); var ids = new HashSet<ulong>();
                         for (int l = 0; l < events; l++)
                         {
-                            ulong id = U64(); uint steps = r.Count(64); if (id == 0 || steps == 0 || !ids.Add(id)) return false;
+                            ulong id = version == 8 ? r.U32() : U64(); uint steps = r.Count(64); if (id == 0 || steps == 0 || !ids.Add(id)) return false;
                             var progress = new float[steps];
                             for (int n = 0; n < steps; n++) { float value = BitConverter.UInt32BitsToSingle(r.U32()); if (!float.IsFinite(value) || value < 0 || value > 1) return false; progress[n] = value; }
                             entries.Add(new(id, progress));

@@ -38,6 +38,9 @@ public static class ProfileData
     }
 
     public static byte[] Swap(byte[] donorEncrypted, byte[] targetEncrypted)
+        => SwapWithDetails(donorEncrypted, targetEncrypted).Encrypted;
+
+    public static (byte[] Encrypted, ulong DonorXuid, ulong TargetXuid) SwapWithDetails(byte[] donorEncrypted, byte[] targetEncrypted)
     {
         byte[] donorPayload = DecryptSwapInput(donorEncrypted, "Donor");
         byte[] targetPayload = DecryptSwapInput(targetEncrypted, "Target");
@@ -54,7 +57,7 @@ public static class ProfileData
         byte[] check = Decrypt(swapped);
         if (!check.AsSpan().SequenceEqual(swappedPayload)) throw new CryptographicException("Swapped save failed payload verification.");
         if (LocateCanonicalAccount(check).Xuid != targetAccount.Xuid) throw new CryptographicException("Swapped save failed account verification.");
-        return swapped;
+        return (swapped, donorAccount.Xuid, targetAccount.Xuid);
     }
 
     private static (int Offset, ulong Xuid) LocateCanonicalAccount(byte[] payload)
@@ -92,7 +95,7 @@ public static class ProfileData
     private static byte[] DecryptSwapInput(byte[] encrypted, string label)
     {
         if (Fh5ProfileCrypto.HasHeaderAuthentication(encrypted.Length, encrypted))
-            throw new InvalidDataException($"{label} is an FH5 save. Save Swap currently supports FH6 only. No swapped save was written.");
+            throw new InvalidDataException($"{label} is an FH5 save, while the other file is an FH6 C_ProfileData save. Both saves must be from the same game. No swapped save was written.");
         var key = Fh6Keys.Get("ProfileData");
         if (!ForzaZip.ValidateContainer(encrypted, key.DataKey, key.MacKey, out _))
             throw new InvalidDataException($"{label} is not an authenticated encrypted FH6 C_ProfileData save. No swapped save was written.");

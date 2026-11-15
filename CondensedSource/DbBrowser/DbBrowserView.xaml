@@ -93,7 +93,7 @@
      <Button Content="Close database" Click="Close_Click"/>
      <Button Content="Import SQL…" Click="ImportSql_Click"/><Button Content="Export SQL…" Click="DumpSql_Click"/>
     </WrapPanel>
-    <TextBlock x:Name="LoadedPath" Text="Open database / Drop a FH6 gamedbRC.slt or a .sqlite or Forza Motorsport gamedb.sqlite file here to begin." Foreground="#9C9CA2" Margin="0,8,0,0" TextWrapping="Wrap"/>
+    <TextBlock x:Name="LoadedPath" Text="Open database / Drop an encrypted GameDB .slt (FH3, FH4, FH5, FH6, FM6 Apex, FM7) or a .sqlite database here to begin." Foreground="#9C9CA2" Margin="0,8,0,0" TextWrapping="Wrap"/>
    </StackPanel>
    <Grid Grid.Row="2" x:Name="DatabaseArea">
     <Grid.ColumnDefinitions><ColumnDefinition Width="*" MinWidth="260"/><ColumnDefinition Width="5"/><ColumnDefinition Width="0.38*" MinWidth="175"/></Grid.ColumnDefinitions>

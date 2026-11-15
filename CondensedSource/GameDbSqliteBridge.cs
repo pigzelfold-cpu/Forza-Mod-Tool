@@ -13,8 +13,15 @@ namespace FH6LocalCryptoTool;
 public static class GameDbSqliteBridge
 {
     private const string TempPrefix = "forza_mod_studio_slt_";
-    public static bool IsSlt(string path) =>
-        Path.GetExtension(path).Equals(".slt", StringComparison.OrdinalIgnoreCase);
+    public static bool IsSlt(string path)
+    {
+        string ext = Path.GetExtension(path);
+        return ext.Equals(".slt", StringComparison.OrdinalIgnoreCase)
+            || ext.Equals(".~b1", StringComparison.OrdinalIgnoreCase); // FH3 obfuscated .slt extension
+    }
+
+    public static string SltExtension(string path) =>
+        Path.GetExtension(path).Equals(".~b1", StringComparison.OrdinalIgnoreCase) ? ".~b1" : ".slt";
 
     public sealed class MaterializedDatabase : IDisposable
     {
@@ -51,9 +58,10 @@ public static class GameDbSqliteBridge
         if (!File.Exists(inputPath)) throw new FileNotFoundException("Database not found.", inputPath);
         if (!IsSlt(inputPath))
         {
-            if (!LooksLikeSqliteFile(inputPath))
+            if (LooksLikeSqliteFile(inputPath))
+                return new MaterializedDatabase(inputPath, null, false);
+            if (GameDbContainerFormat.Detect(inputPath) == GameDbContainerFormat.Kind.Unknown)
                 throw new InvalidDataException("Choose a decrypted SQLite database or an encrypted GameDB .slt.");
-            return new MaterializedDatabase(inputPath, null, false);
         }
 
         string temp = Path.Combine(FH6LocalCryptoTool.TempWorkspace.Root, TempPrefix + Guid.NewGuid().ToString("N") + ".sqlite");
@@ -74,6 +82,10 @@ public static class GameDbSqliteBridge
                 GameDbContainerFormat.Kind.Fh6Aes36 =>
                     GameDb.Decrypt(encrypted, Fh6Keys.Get("GameDB").DataKey),
                 GameDbContainerFormat.Kind.Fh5TransformIt36 => Fh5GameDb.Decrypt(encrypted),
+                GameDbContainerFormat.Kind.Fh4TransformIt36 => LegacyGameDb.Decrypt(encrypted, ForzaGame.Horizon4),
+                GameDbContainerFormat.Kind.Fh3TransformIt36 => LegacyGameDb.Decrypt(encrypted, ForzaGame.Horizon3),
+                GameDbContainerFormat.Kind.Fm7TransformIt32 => LegacyGameDb.Decrypt(encrypted, ForzaGame.Motorsport7),
+                GameDbContainerFormat.Kind.Fm6ApexTransformIt32 => LegacyGameDb.Decrypt(encrypted, ForzaGame.Motorsport6Apex),
                 GameDbContainerFormat.Kind.ForzaMotorsportTransformIt32 =>
                     MotorsportGameDb.Decrypt(encrypted),
                 _ => throw new InvalidDataException(
@@ -109,7 +121,7 @@ public static class GameDbSqliteBridge
         templateSlt = Path.GetFullPath(templateSlt);
         outputSlt = Path.GetFullPath(outputSlt);
         if (!IsSlt(outputSlt))
-            throw new InvalidOperationException("GameDB output must use the .slt extension.");
+            throw new InvalidOperationException("GameDB output must use the .slt (or FH3 .~b1) extension.");
         if (string.Equals(outputSlt, templateSlt, StringComparison.OrdinalIgnoreCase) ||
             string.Equals(outputSlt, sqlitePath, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Choose a new output path; source files are never overwritten.");
@@ -120,11 +132,9 @@ public static class GameDbSqliteBridge
         byte[] sqlite = File.ReadAllBytes(sqlitePath);
         byte[] template = File.ReadAllBytes(templateSlt);
         var format = GameDbContainerFormat.Detect(template);
-        if (format != GameDbContainerFormat.Kind.Sqlite && format != GameDbContainerFormat.Kind.Fh6Aes36 &&
-            format != GameDbContainerFormat.Kind.Fh5TransformIt36 && format != GameDbContainerFormat.Kind.ForzaMotorsportTransformIt32)
+        if (format is GameDbContainerFormat.Kind.Unknown)
             throw new InvalidDataException("The selected .slt template is not a recognized encrypted GameDB.");
         bool plain = format == GameDbContainerFormat.Kind.Sqlite;
-        bool fh5 = format == GameDbContainerFormat.Kind.Fh5TransformIt36;
         bool motorsport = format == GameDbContainerFormat.Kind.ForzaMotorsportTransformIt32;
         if (motorsport && !allowMotorsport)
             throw new NotSupportedException("Use the Crypto tab for Motorsport re-encryption. Motorsport editor/merge integration is not enabled.");
@@ -132,14 +142,38 @@ public static class GameDbSqliteBridge
         {
             original.VerifySourceUnchanged();
             GameDbIdentity.RequireSameGame(sqlitePath, original.SqlitePath);
-            if (plain && GameDbIdentity.Detect(sqlitePath) is ForzaGame.Horizon5 or ForzaGame.Horizon6)
-                throw new InvalidDataException("FH5/FH6 SLT export requires the original encrypted SLT, not a plaintext SQLite template.");
+            var sourceGame = GameDbIdentity.Detect(sqlitePath);
+            if (plain && sourceGame is not (ForzaGame.Unknown or ForzaGame.Horizon2))
+                throw new InvalidDataException($"{GameDbIdentity.DisplayName(sourceGame)} SLT export requires the original encrypted SLT, not a plaintext SQLite template.");
+            var containerGame = GameDbContainerFormat.GameOf(format);
+            if (!plain && sourceGame != ForzaGame.Unknown && containerGame != ForzaGame.Unknown && sourceGame != containerGame)
+                throw new InvalidDataException($"The edited DB is {GameDbIdentity.DisplayName(sourceGame)}, but the template is {GameDbIdentity.DisplayName(containerGame)}. Choose the original SLT from the same game/build.");
             ValidateTemplateVersion(sqlitePath, original.SqlitePath);
         }
-        byte[] encrypted = plain ? sqlite : fh5 ? Fh5GameDb.Encrypt(sqlite, template) : motorsport ? MotorsportGameDb.Encrypt(sqlite, template)
-            : GameDb.Encrypt(sqlite, template, Fh6Keys.Get("GameDB").DataKey);
-        byte[] roundTrip = plain ? encrypted : fh5 ? Fh5GameDb.Decrypt(encrypted) : motorsport ? MotorsportGameDb.Decrypt(encrypted)
-            : GameDb.Decrypt(encrypted, Fh6Keys.Get("GameDB").DataKey);
+        byte[] encrypted = format switch
+        {
+            GameDbContainerFormat.Kind.Sqlite => sqlite,
+            GameDbContainerFormat.Kind.Fh6Aes36 => GameDb.Encrypt(sqlite, template, Fh6Keys.Get("GameDB").DataKey),
+            GameDbContainerFormat.Kind.Fh5TransformIt36 => Fh5GameDb.Encrypt(sqlite, template),
+            GameDbContainerFormat.Kind.Fh4TransformIt36 => LegacyGameDb.Encrypt(sqlite, template, ForzaGame.Horizon4),
+            GameDbContainerFormat.Kind.Fh3TransformIt36 => LegacyGameDb.Encrypt(sqlite, template, ForzaGame.Horizon3),
+            GameDbContainerFormat.Kind.Fm7TransformIt32 => LegacyGameDb.Encrypt(sqlite, template, ForzaGame.Motorsport7),
+            GameDbContainerFormat.Kind.Fm6ApexTransformIt32 => LegacyGameDb.Encrypt(sqlite, template, ForzaGame.Motorsport6Apex),
+            GameDbContainerFormat.Kind.ForzaMotorsportTransformIt32 => MotorsportGameDb.Encrypt(sqlite, template),
+            _ => throw new InvalidDataException("The selected .slt template is not a recognized encrypted GameDB.")
+        };
+        byte[] roundTrip = format switch
+        {
+            GameDbContainerFormat.Kind.Sqlite => encrypted,
+            GameDbContainerFormat.Kind.Fh6Aes36 => GameDb.Decrypt(encrypted, Fh6Keys.Get("GameDB").DataKey),
+            GameDbContainerFormat.Kind.Fh5TransformIt36 => Fh5GameDb.Decrypt(encrypted),
+            GameDbContainerFormat.Kind.Fh4TransformIt36 => LegacyGameDb.Decrypt(encrypted, ForzaGame.Horizon4),
+            GameDbContainerFormat.Kind.Fh3TransformIt36 => LegacyGameDb.Decrypt(encrypted, ForzaGame.Horizon3),
+            GameDbContainerFormat.Kind.Fm7TransformIt32 => LegacyGameDb.Decrypt(encrypted, ForzaGame.Motorsport7),
+            GameDbContainerFormat.Kind.Fm6ApexTransformIt32 => LegacyGameDb.Decrypt(encrypted, ForzaGame.Motorsport6Apex),
+            GameDbContainerFormat.Kind.ForzaMotorsportTransformIt32 => MotorsportGameDb.Decrypt(encrypted),
+            _ => throw new InvalidDataException("The selected .slt template is not a recognized encrypted GameDB.")
+        };
         if (roundTrip.Length < sqlite.Length || !roundTrip.AsSpan(0, sqlite.Length).SequenceEqual(sqlite))
             throw new InvalidDataException("Encrypted output did not reproduce the edited SQLite database.");
 
@@ -168,6 +202,7 @@ public static class GameDbSqliteBridge
         {
             try { return StockDatabaseCatalog.Version(path); }
             catch (SqliteException) { return null; }
+            catch (InvalidDataException) { return null; }
         }
         string? source = Stamp(sqlitePath), template = Stamp(templateSqlite);
         if (source != null && template != null && source != template)

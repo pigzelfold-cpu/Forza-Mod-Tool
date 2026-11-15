@@ -15,7 +15,11 @@ public static class GameDbContainerFormat
         Sqlite,
         Fh6Aes36,
         ForzaMotorsportTransformIt32,
-        Fh5TransformIt36
+        Fh5TransformIt36,
+        Fh4TransformIt36,
+        Fh3TransformIt36,
+        Fm7TransformIt32,
+        Fm6ApexTransformIt32
     }
 
     public const int DataChunkSize = 0x20000;
@@ -44,22 +48,48 @@ public static class GameDbContainerFormat
         {
             // A General/File asset with 2,731 slots has the same length as an
             // eleven-slot GameDB. Authentication, not size, disambiguates FH5.
-            if (Fh5AssetContainer.HasHeaderAuthentication(length, header)) return Kind.Unknown;
-            return Fh5GameDb.HasHeaderAuthentication(length, header) ? Kind.Fh5TransformIt36 : Kind.Fh6Aes36;
+            if (Fh5AssetContainer.HasHeaderAuthentication(length, header) ||
+                LegacyAssetContainer.HasHeaderAuthentication(length, header))
+                return Kind.Unknown;
+            if (Fh5GameDb.HasHeaderAuthentication(length, header)) return Kind.Fh5TransformIt36;
+            if (LegacyGameDb.HasHeaderAuthentication(ForzaGame.Horizon4, length, header)) return Kind.Fh4TransformIt36;
+            if (LegacyGameDb.HasHeaderAuthentication(ForzaGame.Horizon3, length, header)) return Kind.Fh3TransformIt36;
+            return Kind.Fh6Aes36;
         }
 
         long motorsportPayload = length - MotorsportHeaderSize;
         if (motorsportPayload >= SlotSize && motorsportPayload % SlotSize == 0)
+        {
+            if (LegacyAssetContainer.HasHeaderAuthentication(length, header)) return Kind.Unknown;
+            if (LegacyGameDb.HasHeaderAuthentication(ForzaGame.Motorsport7, length, header)) return Kind.Fm7TransformIt32;
+            if (LegacyGameDb.HasHeaderAuthentication(ForzaGame.Motorsport6Apex, length, header)) return Kind.Fm6ApexTransformIt32;
             return Kind.ForzaMotorsportTransformIt32;
+        }
 
         return Kind.Unknown;
     }
+
+    public static ForzaGame GameOf(Kind kind) => kind switch
+    {
+        Kind.Fh3TransformIt36 => ForzaGame.Horizon3,
+        Kind.Fh4TransformIt36 => ForzaGame.Horizon4,
+        Kind.Fh5TransformIt36 => ForzaGame.Horizon5,
+        Kind.Fh6Aes36 => ForzaGame.Horizon6,
+        Kind.Fm6ApexTransformIt32 => ForzaGame.Motorsport6Apex,
+        Kind.Fm7TransformIt32 => ForzaGame.Motorsport7,
+        Kind.ForzaMotorsportTransformIt32 => ForzaGame.Motorsport8,
+        _ => ForzaGame.Unknown
+    };
 
     public static string DisplayName(Kind kind) => kind switch
     {
         Kind.Sqlite => "SQLite",
         Kind.Fh6Aes36 => "FH6 AES GameDB",
         Kind.Fh5TransformIt36 => "FH5 authenticated GameDB",
+        Kind.Fh4TransformIt36 => "FH4 authenticated GameDB",
+        Kind.Fh3TransformIt36 => "FH3 authenticated GameDB",
+        Kind.Fm7TransformIt32 => "FM7 authenticated GameDB",
+        Kind.Fm6ApexTransformIt32 => "FM6 Apex authenticated GameDB",
         Kind.ForzaMotorsportTransformIt32 => "Forza Motorsport TransformIT GameDB",
         _ => "unknown GameDB format"
     };

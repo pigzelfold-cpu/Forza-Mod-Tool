@@ -142,15 +142,26 @@ public partial class GarageViewerView : UserControl
         ClearCarFields();
         await RunAsync(() => {
             var next = GarageProfileSession.Load(path);
-            try { ReloadCatalog(next.Entries().Select(c => c.CarId).ToArray()); }
-            catch { next.Dispose(); throw; }
+            if (next.Game == ForzaGame.Horizon6)
+            {
+                try { ReloadCatalog(next.Entries().Select(c => c.CarId).ToArray()); }
+                catch { next.Dispose(); throw; }
+            }
+            else if (_catalog == null || _catalog.Game != next.Game)
+            {
+                var oldCat = _catalog;
+                _catalog = GarageCarCatalog.Embedded(next.Game);
+                _catalogMessage = "Built-in catalog";
+                oldCat?.Dispose();
+            }
+            _stockThumbnails = FindStockThumbnails(forzaGame: next.Game);
             var previous = _session; _session = next; previous?.Dispose();
         }, "Reading garage on a private copy…");
     }
     async void Load_Click(object sender, RoutedEventArgs e)
     {
         if (_busy) return;
-        var dialog = new OpenFileDialog { Title = "Load FH6 C_ProfileData or FH2 revision file", Filter = "FH6 / FH2 save files|C_ProfileData*;commit;ProfileData;PlayerDatabase|All files|*.*" };
+        var dialog = new OpenFileDialog { Title = "Load FH5 / FH6 save or FH2 revision file", Filter = "Forza save files|C_ProfileData*;*.ProfileData;commit;ProfileData;PlayerDatabase;*.decrypted|All files|*.*" };
         if (dialog.ShowDialog() == true) await LoadProfileAsync(dialog.FileName);
     }
     async void LoadFh2_Click(object sender, RoutedEventArgs e) { if (!_busy) await _fh2Host.ChooseAsync(); }
@@ -188,7 +199,7 @@ public partial class GarageViewerView : UserControl
     async void CatalogFolder_Click(object sender, RoutedEventArgs e)
     {
         if (_busy) return;
-        var dialog = new OpenFileDialog { Title = "Choose the FH6 GameDB used by this save", Filter = "FH6 GameDB|*.slt;*.sqlite;*.db|All files|*.*" };
+        var dialog = new OpenFileDialog { Title = "Choose the GameDB used by this save", Filter = "GameDB|*.slt;*.sqlite;*.db|All files|*.*" };
         if (dialog.ShowDialog() == true) await LoadCatalogAsync(dialog.FileName);
     }
     async void CatalogAuto_Click(object sender, RoutedEventArgs e)
@@ -197,40 +208,47 @@ public partial class GarageViewerView : UserControl
         await RunAsync(() => {
             if (File.Exists(CatalogSourceSetting)) File.Delete(CatalogSourceSetting);
             _catalogPreference = ""; ReloadCatalog();
-        }, "Finding installed FH6 GameDB…");
+        }, "Finding installed GameDB…");
     }
-    static string StockSourceSetting => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ForzaModTool", "garage-stock-thumbnail-source.json");
-    CarThumbnailLibrary? FindStockThumbnails(string? manual = null, bool resetAuto = false) {
-        string? preferred=manual;
-        if(!resetAuto && preferred==null) {
-            try { if(File.Exists(StockSourceSetting) && new FileInfo(StockSourceSetting).Length<16384) preferred=System.Text.Json.JsonSerializer.Deserialize<string>(File.ReadAllText(StockSourceSetting)); }
+    static string StockSourceSetting(ForzaGame game) => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ForzaModTool", $"garage-stock-thumbnail-source-{(game == ForzaGame.Horizon5 ? "FH5" : "FH6")}.json");
+    CarThumbnailLibrary? FindStockThumbnails(string? manual = null, bool resetAuto = false, ForzaGame? forzaGame = null) {
+        var game = forzaGame ?? _session?.Game ?? _catalog?.Game ?? ForzaGame.Horizon6;
+        string? preferred = manual;
+        string settingPath = StockSourceSetting(game);
+        if(!resetAuto && preferred == null) {
+            try { if(File.Exists(settingPath) && new FileInfo(settingPath).Length < 16384) preferred = System.Text.Json.JsonSerializer.Deserialize<string>(File.ReadAllText(settingPath)); }
             catch(Exception ex) when(ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException) { }
         }
-        if(preferred!=null) {
-            try {return new CarThumbnailLibrary(preferred);}
-            catch(Exception ex) when(manual==null && ex is IOException or UnauthorizedAccessException or ArgumentException) { }
+        if(preferred != null) {
+            try { return new CarThumbnailLibrary(preferred); }
+            catch(Exception ex) when(manual == null && ex is IOException or UnauthorizedAccessException or ArgumentException) { }
         }
-        foreach(string path in CarThumbnailLibrary.FindSources(null,false).Concat(new[]{CarThumbnailLibrary.SavedSource(false)}).OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase)) {
-            try {return new CarThumbnailLibrary(path);}
+        foreach(string path in CarThumbnailLibrary.FindSources(null, game).Concat(new[]{CarThumbnailLibrary.SavedSource(game)}).OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase)) {
+            try { return new CarThumbnailLibrary(path); }
             catch(Exception ex) when(ex is IOException or UnauthorizedAccessException or ArgumentException) { }
         }
         return null;
     }
     async void StockThumbnailFolder_Click(object sender,RoutedEventArgs e) {
         if(_busy || !TryApplyCarFields())return;
-        var dialog=new OpenFolderDialog{Title="Choose FH6 media/Stripped folder, or stock model image folder"};
+        var game = _session?.Game ?? _catalog?.Game ?? ForzaGame.Horizon6;
+        var dialog=new OpenFolderDialog{Title=$"Choose {GameDbIdentity.DisplayName(game)} media/Stripped folder, or stock model image folder"};
         if(dialog.ShowDialog()==true)await RunAsync(()=>{
-            var next=FindStockThumbnails(dialog.FolderName);
-            Directory.CreateDirectory(Path.GetDirectoryName(StockSourceSetting)!);
-            File.WriteAllText(StockSourceSetting,System.Text.Json.JsonSerializer.Serialize(dialog.FolderName));
+            var next=FindStockThumbnails(dialog.FolderName, forzaGame: game);
+            string settingPath = StockSourceSetting(game);
+            Directory.CreateDirectory(Path.GetDirectoryName(settingPath)!);
+            File.WriteAllText(settingPath,System.Text.Json.JsonSerializer.Serialize(dialog.FolderName));
+            CarThumbnailLibrary.SaveSource(game, dialog.FolderName);
             _stockThumbnails=next;
         },"Indexing stock model thumbnails…");
     }
     async void StockThumbnailAuto_Click(object sender,RoutedEventArgs e) {
         if(_busy || !TryApplyCarFields())return;
+        var game = _session?.Game ?? _catalog?.Game ?? ForzaGame.Horizon6;
         await RunAsync(()=>{
-            if(File.Exists(StockSourceSetting))File.Delete(StockSourceSetting);
-            _stockThumbnails=FindStockThumbnails(resetAuto:true);
+            string settingPath = StockSourceSetting(game);
+            if(File.Exists(settingPath))File.Delete(settingPath);
+            _stockThumbnails=FindStockThumbnails(resetAuto:true, forzaGame: game);
             // Re-read the same actual cache so newly generated garage thumbnails win.
             string directory=_thumbnails?.DirectoryPath ?? GarageThumbnailCache.DefaultDirectory;
             try {var next=new GarageThumbnailCache(directory);var previous=_thumbnails;_thumbnails=next;previous?.Dispose();_thumbnailMessage=$"Garage thumbnail cache: {next.Count:N0} references (read-only)";}
@@ -550,9 +568,12 @@ public partial class GarageViewerView : UserControl
         var selected=CatalogList.SelectedItems.Cast<GarageCarDefinition>().Select(c=>c.Id).ToArray();
         if(selected.Length==0)return;
         IReadOnlyList<long> ids=Array.Empty<long>();
-        await RunAsync(() => ids = _session.AddStocks(selected, _catalog), $"Creating {selected.Length} stock car configuration(s) and syncing Car Collection…", $"Added {selected.Length} stock car(s) to working copy. Export a new save to keep them.");
+        string statusMsg = _session.Game == ForzaGame.Horizon5
+            ? $"Creating {selected.Length} stock car configuration(s)…"
+            : $"Creating {selected.Length} stock car configuration(s) and syncing Car Collection…";
+        await RunAsync(() => ids = _session.AddStocks(selected, _catalog), statusMsg, $"Added {selected.Length} stock car(s) to working copy. Export a new save to keep them.");
         if(ids.Count>0) {
-            StatusText.Text += "\n" + _session.JournalSyncSummary;
+            if (!string.IsNullOrWhiteSpace(_session.JournalSyncSummary)) StatusText.Text += "\n" + _session.JournalSyncSummary;
             _restoringSelection=true;
             try {GarageGrid.SelectedItems.Clear();foreach(var row in _rows.Where(c=>ids.Contains(c.Id))) GarageGrid.SelectedItems.Add(row);}
             finally {_restoringSelection=false;}
@@ -567,7 +588,8 @@ public partial class GarageViewerView : UserControl
     async void Export_Click(object sender, RoutedEventArgs e)
     {
         if (_busy || _session == null || !TryApplyCarFields()) return;
-        var dialog = new SaveFileDialog { Title = "Export a new C_ProfileData save — never overwrite your original", FileName = "C_ProfileData.garage-edited", Filter = "Profile save|*.*", OverwritePrompt = false };
+        string defaultName = _session.Game == ForzaGame.Horizon5 ? "User_ProfileData.garage-edited" : "C_ProfileData.garage-edited";
+        var dialog = new SaveFileDialog { Title = "Export a new save — never overwrite your original", FileName = defaultName, Filter = "Profile save|*.*", OverwritePrompt = false };
         if (dialog.ShowDialog() == true) await RunAsync(() => _session.Export(dialog.FileName), "Exporting and verifying save payload…", "Exported: " + dialog.FileName + "\nOriginal save unchanged. Back up your whole save and close the game before installation.");
     }
     async void File_Drop(object sender, DragEventArgs e)

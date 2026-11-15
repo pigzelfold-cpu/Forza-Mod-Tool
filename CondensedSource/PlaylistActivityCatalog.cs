@@ -12,11 +12,13 @@ internal static class PlaylistActivityCatalog
     internal sealed record Activity(uint Type, ulong Id, int Stages, int Points);
     internal sealed record Season(uint Index, Activity[] Activities)
     {
-        internal int Maximum => Activities.Sum(a => a.Points);
+        internal int? StoredMaximum { get; init; }
+        internal int Maximum => StoredMaximum ?? Activities.Sum(a => a.Points);
     }
     internal sealed record Series(uint Id, string Name, Season[] Seasons)
     {
-        internal int Maximum => Seasons.Sum(s => s.Maximum);
+        internal int? StoredMaximum { get; init; }
+        internal int Maximum => StoredMaximum ?? Seasons.Sum(s => s.Maximum);
     }
 
     internal static Series[] Read(ObjectModelSource source, GameLabels labels)

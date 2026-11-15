@@ -20,7 +20,8 @@ public sealed class GarageProfileSession : IDisposable
     readonly byte[] _original, _stream;
     readonly ProfileContainer _profile;
     ProfileContainer _progress;
-    readonly bool _encrypted;
+    readonly bool _encrypted, _isFh5;
+    public ForzaGame Game => _isFh5 ? ForzaGame.Horizon5 : ForzaGame.Horizon6;
     readonly HashSet<long> _pending = new();
     long? _pendingReplacementId;
     readonly HashSet<string> _barnVins = new(StringComparer.OrdinalIgnoreCase);
@@ -58,12 +59,29 @@ public sealed class GarageProfileSession : IDisposable
     {
         SourcePath = Path.GetFullPath(source); _original = File.ReadAllBytes(SourcePath);
         SourceHash = Convert.ToHexString(SHA256.HashData(_original));
-        _encrypted = _original.Length < 4 || !_original.AsSpan(0,4).SequenceEqual(new byte[]{0xB6,0xF2,0x8B,0x4A});
-        _stream = _encrypted ? ProfileData.Decrypt(_original) : _original;
+        bool fh5 = Fh5ProfileCrypto.HasHeaderAuthentication(_original.Length, _original);
+        if (fh5)
+        {
+            _encrypted = true;
+            _stream = Fh5ProfileCrypto.Decrypt(_original);
+        }
+        else if (_original.Length >= 4 && _original.AsSpan(0, 4).SequenceEqual(new byte[] { 0xB6, 0xF2, 0x8B, 0x4A }))
+        {
+            _encrypted = false;
+            _stream = _original;
+        }
+        else
+        {
+            _encrypted = true;
+            _stream = ProfileData.Decrypt(_original);
+        }
         _profile = ProfileContainer.Parse(_stream);
+        if (!_encrypted && Fh5ProfileCrypto.IsProfileDatabase(_profile.Database))
+            fh5 = true;
+        _isFh5 = fh5;
         _progress = _profile;
 #if PROFILE_UNLOCK_TESTING
-        ProfileGameData.AttachAutomatically(_profile);
+        if (!_isFh5) ProfileGameData.AttachAutomatically(_profile);
 #endif
         _work = Path.Combine(FH6LocalCryptoTool.TempWorkspace.Root, $"forza_garage_profile_{Environment.ProcessId}_{Guid.NewGuid():N}.sqlite");
         File.WriteAllBytes(_work, _profile.Database);
@@ -80,7 +98,9 @@ public sealed class GarageProfileSession : IDisposable
             if (!new[]{"Id","CarId","Guid"}.All(_garageColumns.Contains)) throw new InvalidDataException("Garage layout is not recognized.");
             if (schema.Count(c => L(c["pk"]) != 0) != 1 || !schema.Any(c => (string)c["name"] == "Id" && L(c["pk"]) == 1 && (string)c["type"] == "INTEGER"))
                 _layoutRestriction = "This garage has an unsupported identity schema; viewing only.";
-            if (!_tables.Contains("Career_PurchasedParts") || !new[]{"GarageId","UngroupedPartEnum","PartId","PricePaid"}.All(c => Columns("Career_PurchasedParts").Contains(c)))
+            var ppCols = _tables.Contains("Career_PurchasedParts") ? Columns("Career_PurchasedParts") : new HashSet<string>();
+            if (!_tables.Contains("Career_PurchasedParts") || !new[]{"GarageId","PartId","PricePaid"}.All(ppCols.Contains) ||
+                (!ppCols.Contains("UngroupedPartEnum") && !ppCols.Contains("PartEnum")))
                 _layoutRestriction = "Purchased-parts layout is not recognized; viewing only.";
             foreach (string table in _tables.Where(t => t != "Career_Garage" && t != "Career_PurchasedParts"))
                 if (Columns(table).Contains("GarageId")) _layoutRestriction = $"Additional garage-linked table {table} is not supported; viewing only.";
@@ -237,15 +257,22 @@ public sealed class GarageProfileSession : IDisposable
     }
     public long Duplicate(long garageId) {
         var row=Row(garageId); long added=0;
-        var progress=PrepareCollectionJournal(new[]{L(row["CarId"])},out string journalSummary);
+        string journalSummary = "";
+        var progress = _isFh5 ? _progress : PrepareCollectionJournal(new[]{L(row["CarId"])},out journalSummary);
+        string summary = _isFh5 ? "" : journalSummary;
         foreach(string field in History.Where(f=>f!="PartsValue"))if(row.ContainsKey(field))row[field]=0L;
         Atomic(()=>{
             added=Insert(row);
             // Copy only this instance's owned parts. Tunes/liveries are referenced,
             // never deleted or reassigned; a new VIN prevents perk/identity reuse.
-            Exec("INSERT INTO Career_PurchasedParts (GarageId,UngroupedPartEnum,PartId,PricePaid) SELECT $p0,UngroupedPartEnum,PartId,PricePaid FROM Career_PurchasedParts WHERE GarageId=$p1",added,garageId);
+            var copyCols = Columns("Career_PurchasedParts").Where(c => !string.Equals(c, "GarageId", StringComparison.OrdinalIgnoreCase)).ToArray();
+            if (copyCols.Length > 0)
+            {
+                string colNames = string.Join(",", copyCols.Select(Q));
+                Exec($"INSERT INTO Career_PurchasedParts (GarageId,{colNames}) SELECT $p0,{colNames} FROM Career_PurchasedParts WHERE GarageId=$p1", added, garageId);
+            }
         });
-        _progress=progress;JournalSyncSummary=journalSummary;
+        _progress=progress;JournalSyncSummary=summary;
         return added;
     }
     public long AddStock(long carId, GarageCarCatalog catalog) {
@@ -253,15 +280,16 @@ public sealed class GarageProfileSession : IDisposable
     }
     public IReadOnlyList<long> AddStocks(IReadOnlyCollection<long> carIds, GarageCarCatalog catalog) {
         CheckAddable();
-        if(catalog.Game!=ForzaGame.Horizon6)throw new InvalidDataException("FH6 saves require an FH6 car catalog.");
+        if(catalog.Game != Game) throw new InvalidDataException($"Save is {GameDbIdentity.DisplayName(Game)} but car catalog is {GameDbIdentity.DisplayName(catalog.Game)}. Match the catalog to the save.");
         var ids=carIds.Distinct().ToArray();
         if(ids.Length==0)throw new InvalidOperationException("Select one or more stock cars first.");
         // Resolve every configuration before writing. One transaction means a bad
         // model or failed insert cannot leave a partially added manufacturer/batch.
         var rows=ids.Select(id=>CreateStockRow(id,catalog)).ToArray();
-        var progress=PrepareCollectionJournal(ids,out string journalSummary);
+        string journalSummary = "";
+        var progress = _isFh5 ? _progress : PrepareCollectionJournal(ids,out journalSummary);
         var added=new List<long>();Atomic(()=>{foreach(var row in rows)added.Add(Insert(row));}, additionsOnly: true);
-        _progress=progress;JournalSyncSummary=journalSummary;
+        _progress=progress;JournalSyncSummary = _isFh5 ? "" : journalSummary;
         return added;
     }
     ProfileContainer PrepareCollectionJournal(IEnumerable<long> carIds,out string summary) {
@@ -295,6 +323,8 @@ public sealed class GarageProfileSession : IDisposable
     }
     public void Export(string destination) {
         destination=Path.GetFullPath(destination);
+        if (_isFh5 && SaveLocator.IsLiveWgsContainerPath(destination))
+            throw new InvalidOperationException("Cannot export directly into a live Windows Store (WGS) save directory. Save to a separate folder first.");
         if(destination.Equals(SourcePath,StringComparison.OrdinalIgnoreCase)||File.Exists(destination))throw new IOException("Choose a new output filename; input and existing files are never overwritten.");
         if(Convert.ToString(Scalar("PRAGMA integrity_check"))!="ok")throw new InvalidDataException("Garage database failed integrity_check; no save exported.");
         string snapshot=_work+".export.sqlite";
@@ -316,8 +346,9 @@ public sealed class GarageProfileSession : IDisposable
                 if (node == null || !node.TrySetFromText(id.ToString(CultureInfo.InvariantCulture)))
                     throw new InvalidDataException($"The {path} reference could not be serialized; no save exported.");
             }
-            byte[] stream=exported.Serialize();byte[] bytes=_encrypted?ProfileData.Encrypt(stream,_original):stream;
-            byte[] check=_encrypted?ProfileData.Decrypt(bytes):bytes;
+            byte[] stream=exported.Serialize();
+            byte[] bytes = _encrypted ? (_isFh5 ? Fh5ProfileCrypto.Encrypt(stream, _original) : ProfileData.Encrypt(stream, _original)) : stream;
+            byte[] check = _encrypted ? (_isFh5 ? Fh5ProfileCrypto.Decrypt(bytes) : ProfileData.Decrypt(bytes)) : bytes;
             if(!stream.AsSpan().SequenceEqual(check))throw new InvalidDataException("Exported save failed payload round-trip verification.");
             var packed=ProfileContainer.Parse(check);
             // Restore the edited references on the verification copy before comparing progress.

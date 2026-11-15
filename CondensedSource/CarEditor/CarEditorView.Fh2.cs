@@ -11,31 +11,34 @@ public partial class CarEditorView
 {
     ForzaGame _editorGame;
     bool IsFh2 => _editorGame == ForzaGame.Horizon2;
+    bool IsFh3 => _editorGame == ForzaGame.Horizon3;
+    bool IsFh4 => _editorGame == ForzaGame.Horizon4;
     bool IsFh5 => _editorGame == ForzaGame.Horizon5;
     bool IsFh6 => _editorGame == ForzaGame.Horizon6;
     string EditorGameName => GameDbIdentity.DisplayName(_editorGame);
 
     void DetectEditorCompatibility()
     {
-        // Independent schema signatures separate all four games. Extensions,
+        // Independent schema signatures separate all games. Extensions,
         // Autoshow, IDs and CarTrackOffsets are not sufficient game identities.
         _editorGame = GameDbIdentity.Detect(_conn);
     }
 
     void ConfigureEditorCompatibility()
     {
-        Fh2SteeringPanel.Visibility = IsFh2 ? Visibility.Visible : Visibility.Collapsed;
+        bool hasSteeringInSprings = HasColumn("List_UpgradeSpringDamper", "SteerMaxAngle");
+        Fh2SteeringPanel.Visibility = (IsFh2 || IsFh3 || !hasSteeringInSprings) ? Visibility.Visible : Visibility.Collapsed;
         OptFh2DriftAngle.IsChecked = false;
-        OptSlam.Content = IsFh2 ? "Add / repair custom drift suspension (FH2)" : "Remove suspension limit — drift suspension";
-        OptSlam.ToolTip = IsFh2
-            ? "Adds an extra Race-tier option using this car's stock geometry and native FH2 tuning ranges. Reapply to repair. Steering is optional and car-wide, not kit-specific. In-game testing required."
+        OptSlam.Content = (IsFh2 || IsFh3) ? $"Add / repair custom drift suspension ({EditorGameName})" : "Remove suspension limit — drift suspension";
+        OptSlam.ToolTip = (IsFh2 || IsFh3)
+            ? $"Adds an extra Race-tier option using this car's stock geometry and native {EditorGameName} tuning ranges. Reapply to repair. Steering is optional and car-wide, not kit-specific. In-game testing required."
             : "Adds Drift suspension when missing, repairs locked tuning ranges when reapplied, lowers ride-height limits, and applies the steering angle below.";
-        DriftSteeringAngle.IsEnabled = !IsFh2;
-        DriftSteeringAngle.ToolTip = IsFh2
+        DriftSteeringAngle.IsEnabled = hasSteeringInSprings;
+        DriftSteeringAngle.ToolTip = (IsFh2 || IsFh3)
             ? "Car-wide SteerMaxAngle / SteerMaxAngleFiltered override in degrees. Uncheck Override steering angle and Apply to restore the matching stock values; the custom kit is kept."
             : "Degrees written to the Drift suspension's SteerMaxAngle and SteerMaxAngleFiltered fields.";
         OptFmTrack.Content = "Direct track offsets (mm)";
-        DirectTrackHint.Text = IsFh2 ? "Not supported in FH2. Use the separate FH2 wheel mod for track width."
+        DirectTrackHint.Text = (IsFh2 || IsFh3) ? $"Not supported in {EditorGameName}. Use the separate wheel mod for track width."
             : "Enter mm; 15 stores as 0.015 m. Base and upgraded offsets are separate per-car fields; no extra upgrade-menu choices. Check this option and Apply. In-game effect still needs verification.";
         OptFeTires.IsEnabled = !IsFh2;
         if (IsFh2)
@@ -48,23 +51,29 @@ public partial class CarEditorView
             Log("FH2-compatible schema · plain SQLite SLT export · native engine/motor, power, fitment, Race/Rally and custom drift support. Modern FH6-only options stay disabled.", "info");
         }
         else OptFeTires.ToolTip = "Adds generic Forza Edition tire choices without deleting existing tires.";
-        WhiteTiresHint.Text = IsFh2 || IsFh5 ? "Copies this game's native whitewall / vintage tire set and matching brand."
+        WhiteTiresHint.Text = (IsFh2 || IsFh3 || IsFh5) ? "Copies this game's native whitewall / vintage tire set and matching brand."
             : "Whitewall, vintage, vintage race, yellowwall + full grip. Brand swap is required for vintage compounds to load.";
-        OptWhite.ToolTip = IsFh2 || IsFh5 ? "Uses this game's whiteWall donor and native brand; no FH6-only tire model names."
+        OptWhite.ToolTip = (IsFh2 || IsFh3 || IsFh5) ? "Uses this game's whiteWall donor and native brand; no FH6-only tire model names."
             : "Sets TireBrandID = 4 and clones a curated 13-tire set (required for vintage compounds).";
         FeTiresHint.Text = IsFh5 ? "Adds the native FH5 Horizon Edition tire variants present in this DB, not FH6's _FE graphics."
+            : IsFh3 ? "Adds native FH3 Horizon Edition tire variants."
+            : IsFh4 ? "Adds native FH4 Forza Edition tire variants."
             : IsFh2 ? "FH2 has no Forza Edition tire assets."
             : "Adds Street, Sport, Semi-Slick, Rally, Slick, Offroad, Snow and Drag variants using the game's _FE tire models.";
         if (IsFh5) OptFeTires.ToolTip = "Clones FH5's own Horizon Edition tire variants without deleting existing ordinary tires.";
-        if (IsFh5)
+        if (IsFh3)
+            Log("FH3 schema · authenticated FH3 SLT (.~b1) export · native FH3 engines, upgrades, and car naming schema. De-obfuscated dictionary active.", "info");
+        else if (IsFh4)
+            Log("FH4 schema · authenticated FH4 SLT export · native FH4 engines, upgrades, track spacing and car naming. Modern FH6-only options disabled.", "info");
+        else if (IsFh5)
             Log("FH5 schema · authenticated FH5 SLT export · native FH5 engines, upgrades and matching embedded stock reference. FH6 engine/audio imports and enhanced Lotus package are not used.", "info");
-        FiltBodykit.IsEnabled = HasColumn("UpgradePresetPackages", "CarBody");
+        FiltBodykit.IsEnabled = HasColumn("UpgradePresetPackages", "CarBody") || HasColumn("UpgradePresetPackages", "CarBodyId");
         FiltBodykit.ToolTip = FiltBodykit.IsEnabled ? null : "This schema has no bodykit preset-package table.";
     }
 
     void ShowFh2SteeringAngle()
     {
-        if (!IsFh2 || _car == null || _batchRunning) return;
+        if ((!IsFh2 && !IsFh3) || _car == null || _batchRunning) return;
         using var scope = SuppressOptionAutoCheck();
         long id = _car.Id;
         var baseline = Fh2SteeringBaseline(id);
@@ -87,7 +96,7 @@ public partial class CarEditorView
 
     void Fh2DriftAngle_Click(object sender, RoutedEventArgs e)
     {
-        if (!IsFh2) return;
+        if (!IsFh2 && !IsFh3) return;
         DriftSteeringAngle.IsEnabled = OptFh2DriftAngle.IsChecked == true;
         OptSlam.IsChecked = true; // Both enable and disable are queued until Apply.
     }
@@ -191,7 +200,7 @@ public partial class CarEditorView
         }
         else if (baseline != null)
             Exec("UPDATE Data_Car SET SteerMaxAngle=?,SteerMaxAngleFiltered=? WHERE Id=?", baseline["SteerMaxAngle"], baseline["SteerMaxAngleFiltered"], carId);
-        Log($"✓ FH2 custom drift part {partId} (extra Race-tier choice); " + (angle.HasValue ? $"car-wide steering {angle:0.##}°" : "original steering kept/restored") + ". Export, then test in game.", "ok");
+        Log($"✓ {EditorGameName} custom drift part {partId} (extra Race-tier choice); " + (angle.HasValue ? $"car-wide steering {angle:0.##}°" : "original steering kept/restored") + ". Export, then test in game.", "ok");
     }
 
     void ApplyNativeHorizonWhitewalls(long carId)

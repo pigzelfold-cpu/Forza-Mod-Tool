@@ -610,7 +610,7 @@
                     <Image Source="/Assets/Logo/dbtool_icon.png" Width="42" Height="42"
                            HorizontalAlignment="Center" Stretch="Uniform"
                            RenderOptions.BitmapScalingMode="HighQuality"/>
-                    <TextBlock x:Name="DropTitle" Text="Drop a FH2, FH5, FH6 or FM8 GameDB here" FontSize="18" FontWeight="Bold"
+                    <TextBlock x:Name="DropTitle" Text="Drop a FH2–FH6, FM6 Apex, FM7 or FM8 GameDB here" FontSize="18" FontWeight="Bold"
                                HorizontalAlignment="Center" Margin="0,5,0,0"/>
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,5,0,0">
                         <Ellipse Width="5" Height="5" Fill="{StaticResource Pink}" VerticalAlignment="Center" Margin="0,0,7,0"/>
@@ -627,7 +627,7 @@
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,2,0,0">
                         <Ellipse Width="5" Height="5" Fill="{StaticResource Pink}" VerticalAlignment="Center" Margin="0,0,7,0"/>
                         <TextBlock Foreground="{StaticResource Dim}" FontSize="12.5" VerticalAlignment="Center">
-                            <Run Text="asset" Foreground="{StaticResource Ink}"/><Run Text="  ↔  FH5/FH6/FM8 ini, txt, JSON, XML"/>
+                            <Run Text="asset" Foreground="{StaticResource Ink}"/><Run Text="  ↔  FH3/FH4/FH5/FH6/FM6 Apex/FM7/FM8 containers"/>
                         </TextBlock>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,2,0,0">
@@ -639,7 +639,7 @@
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,2,0,0">
                         <Ellipse Width="5" Height="5" Fill="{StaticResource Pink}" VerticalAlignment="Center" Margin="0,0,7,0"/>
                         <TextBlock Foreground="{StaticResource Dim}" FontSize="12.5" VerticalAlignment="Center">
-                            <Run Text="Profile save" Foreground="{StaticResource Ink}"/><Run Text="  →  .decrypted — FH5 decrypt only / FH6 decrypt and re-encrypt"/>
+                            <Run Text="Profile save" Foreground="{StaticResource Ink}"/><Run Text="  →  .decrypted — FH5 decrypt only / FH3, FH4, FH6, FM6 Apex, FM7 decrypt &amp; re-encrypt"/>
                         </TextBlock>
                     </StackPanel>
                     <TextBlock x:Name="StagedText" Visibility="Collapsed" HorizontalAlignment="Center"
@@ -677,7 +677,7 @@
             <Grid.ColumnDefinitions><ColumnDefinition Width="112"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
             <TextBlock Text="Profile template:" VerticalAlignment="Center" Foreground="{StaticResource Dim}" FontSize="13.5"/>
             <Border Grid.Column="1" Background="#FF202023" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="8" Margin="0,0,12,0" Padding="12,9" Height="38">
-                <TextBlock x:Name="ProfileTemplateText" Text="(auto: the last encrypted FH6 C_ProfileData you decrypted)" Foreground="{StaticResource Dim}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                <TextBlock x:Name="ProfileTemplateText" Text="(auto: the last encrypted profile you decrypted)" Foreground="{StaticResource Dim}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
             </Border>
             <Button Grid.Column="2" Content="Browse…" Style="{StaticResource PinkButton}" Click="BrowseProfileTemplate_Click"/>
         </Grid>
@@ -823,26 +823,30 @@
               <help:TabHelpButton Topic="SaveSwap"/>
               </StackPanel>
               <TextBlock Margin="0,3,0,0" Foreground="{StaticResource Dim}" FontSize="12" TextWrapping="Wrap"
-                         Text="Copies donor progress while retaining the target account identity and container framing — originals are never overwritten."/>
+                         Text="Forza Horizon 5 (latest &amp; legacy builds) and Forza Horizon 6 — copies donor progress while retaining your target account identity and encryption format. Originals are never overwritten."/>
             </StackPanel>
           </Border>
-          <TextBlock Grid.Row="1" Text="DONOR SAVE (downloaded save)" Foreground="{StaticResource Pink}" FontWeight="Bold" Margin="0,0,0,7"/>
+          <TextBlock Grid.Row="1" Text="DONOR SAVE (downloaded FH5 ProfileData or FH6 C_ProfileData)" Foreground="{StaticResource Pink}" FontWeight="Bold" Margin="0,0,0,7"/>
           <Grid Grid.Row="2" Margin="0,0,0,20">
             <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-            <TextBox x:Name="DonorSaveText" Grid.Column="0" Height="40" Style="{StaticResource Input}"/>
+            <TextBox x:Name="DonorSaveText" Grid.Column="0" Height="40" Style="{StaticResource Input}"
+                     AllowDrop="True" PreviewDragOver="SaveInput_PreviewDragOver" Drop="DonorSave_Drop"/>
             <Button Grid.Column="1" Content="Browse…" Style="{StaticResource PinkButton}" Margin="10,0,0,0" Click="BrowseDonorSave_Click"/>
           </Grid>
-          <TextBlock Grid.Row="3" Text="TARGET SAVE (your save)" Foreground="{StaticResource Pink}" FontWeight="Bold" Margin="0,0,0,7"/>
+          <TextBlock Grid.Row="3" Text="TARGET SAVE (your own FH5 ProfileData or FH6 C_ProfileData)" Foreground="{StaticResource Pink}" FontWeight="Bold" Margin="0,0,0,7"/>
           <Grid Grid.Row="4" Margin="0,0,0,20">
-            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-            <TextBox x:Name="TargetSaveText" Grid.Column="0" Height="40" Style="{StaticResource Input}"/>
-            <Button Grid.Column="1" Content="Browse…" Style="{StaticResource PinkButton}" Margin="10,0,0,0" Click="BrowseTargetSave_Click"/>
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+            <TextBox x:Name="TargetSaveText" Grid.Column="0" Height="40" Style="{StaticResource Input}"
+                     AllowDrop="True" PreviewDragOver="SaveInput_PreviewDragOver" Drop="TargetSave_Drop"/>
+            <Button Grid.Column="1" Content="Find Save…" Style="{StaticResource PinkButton}" Margin="10,0,0,0" Click="FindTargetSave_Click"
+                    ToolTip="Automatically scan local Steam, MS Store / Xbox (WGS &amp; PGS), OnlineFix, EMPRESS and RUNE folders for FH5 and FH6 saves"/>
+            <Button Grid.Column="2" Content="Browse…" Style="{StaticResource PinkButton}" Margin="10,0,0,0" Click="BrowseTargetSave_Click"/>
           </Grid>
           <StackPanel Grid.Row="5">
-            <Button Content="Build Swapped Save" Style="{StaticResource PinkFilled}" Height="44" HorizontalAlignment="Left" Padding="24,0" Click="SwapSave_Click"/>
+            <Button x:Name="SwapSaveButton" Content="Build Swapped Save" Style="{StaticResource PinkFilled}" Height="44" HorizontalAlignment="Left" Padding="24,0" Click="SwapSave_Click"/>
             <Border Style="{StaticResource PremiumCard}" Margin="0,22,0,0" Padding="16">
               <TextBlock x:Name="SwapStatusText" Foreground="{StaticResource Dim}" TextWrapping="Wrap"
-                         Text="Choose two C_ProfileData files. The result is written beside the target with a .swapped name; the original is untouched."/>
+                         Text="Choose two FH5 ProfileData saves (older 2021–2023 donor saves automatically convert to your target FH5 encryption format) or two FH6 C_ProfileData saves. The result is written as a new .swapped file; originals are untouched."/>
             </Border>
           </StackPanel>
         </Grid>

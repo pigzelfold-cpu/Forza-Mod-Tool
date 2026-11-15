@@ -63,6 +63,8 @@ public static class ThumbnailInstallDiscovery
         => GameRoots(motorsport ? "Forza Motorsport" : "Forza Horizon 6");
 
     internal static IEnumerable<string> Horizon5GameRoots() => GameRoots("Forza Horizon 5");
+    internal static IEnumerable<string> Horizon4GameRoots() => GameRoots("Forza Horizon 4");
+    internal static IEnumerable<string> Horizon3GameRoots() => GameRoots("Forza Horizon 3");
 
     static IEnumerable<string> GameRoots(string gameName)
     {

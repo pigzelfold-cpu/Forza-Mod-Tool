@@ -21,9 +21,9 @@ public sealed class CarThumbnailLibrary
     readonly object _sync = new();
     const int MaxImageBytes = 8 * 1024 * 1024;
     static readonly Regex OfflineName = new(@"^(\d+)_[0-9a-f]{16}bm(\d+)_Big$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-    static readonly Regex IdName = new(@"^(?:thumbnail_)?(\d+)(?:_(big|small))?$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-    static readonly Regex ResourceArchiveName = new(@"^RC\d+(HiRes)?\.zip$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-    static readonly HashSet<string> Extensions = new(StringComparer.OrdinalIgnoreCase) { ".swatchbin", ".webp", ".png", ".jpg", ".jpeg", ".bmp" };
+    static readonly Regex IdName = new(@"^(?:thumbnail_|B_)?(\d+)(?:_(big|small))?$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    static readonly Regex ResourceArchiveName = new(@"^RC\d+(?:HiRes)?\.zip$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    static readonly HashSet<string> Extensions = new(StringComparer.OrdinalIgnoreCase) { ".swatchbin", ".webp", ".png", ".jpg", ".jpeg", ".bmp", ".~ml1^@`$8" };
     public string SourcePath { get; }
     public int Count => _entries.Count;
 
@@ -31,7 +31,7 @@ public sealed class CarThumbnailLibrary
     {
         SourcePath = NormalizeSource(Path.GetFullPath(path));
         if (Directory.Exists(SourcePath)) IndexFolder(SourcePath, 0, new int[1]);
-        else if (File.Exists(SourcePath) && Path.GetExtension(SourcePath).Equals(".zip", StringComparison.OrdinalIgnoreCase)) IndexArchive(SourcePath);
+        else if (File.Exists(SourcePath) && (Path.GetExtension(SourcePath).Equals(".zip", StringComparison.OrdinalIgnoreCase) || Path.GetExtension(SourcePath).Equals(".,$u", StringComparison.OrdinalIgnoreCase))) IndexArchive(SourcePath);
         else throw new FileNotFoundException("Choose a thumbnail folder or ZIP archive.", SourcePath);
         if (Count == 0) throw new InvalidDataException("No supported model thumbnails found. Choose the game's media/stripped folder (RC*.zip), OfflineThumbnails.zip or images named by Car ID / MediaName.");
     }
@@ -43,6 +43,11 @@ public sealed class CarThumbnailLibrary
              Regex.IsMatch(Path.GetFileNameWithoutExtension(p), @"^[A-Za-z0-9]+_[A-Za-z0-9_]+_\d{2}(?:_big)?$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)))) return path;
         string? native = Fh2ThumbnailDiscovery.NativeFolders(path).FirstOrDefault();
         if (native != null) return native;
+        foreach (string candidate in new[] {
+            Path.Combine(path, "media", "Stripped"), Path.Combine(path, "Stripped"), Path.Combine(path, "Content", "media", "Stripped"),
+            Path.Combine(path, "gq6$l", "~14$uuq6"), Path.Combine(path, "~14$uuq6")
+        })
+            if (Directory.Exists(candidate) && (File.Exists(Path.Combine(candidate, "RC0.zip")) || File.Exists(Path.Combine(candidate, "4^[.,$u")))) return candidate;
         // A package may be wrapped in an arbitrarily named outer directory.
         // Inspect one bounded child level, not the game's complete asset tree.
         foreach (string child in Directory.EnumerateDirectories(path).Take(128))
@@ -50,6 +55,11 @@ public sealed class CarThumbnailLibrary
             if ((File.GetAttributes(child) & FileAttributes.ReparsePoint) != 0) continue;
             native = Fh2ThumbnailDiscovery.NativeFolders(child).FirstOrDefault();
             if (native != null) return native;
+            foreach (string candidate in new[] {
+                Path.Combine(child, "media", "Stripped"), Path.Combine(child, "Stripped"), Path.Combine(child, "Content", "media", "Stripped"),
+                Path.Combine(child, "gq6$l", "~14$uuq6"), Path.Combine(child, "~14$uuq6")
+            })
+                if (Directory.Exists(candidate) && (File.Exists(Path.Combine(candidate, "RC0.zip")) || File.Exists(Path.Combine(candidate, "4^[.,$u")))) return candidate;
         }
         return path;
     }
@@ -61,8 +71,10 @@ public sealed class CarThumbnailLibrary
         foreach (string file in Directory.EnumerateFiles(folder).OrderBy(p => p, StringComparer.OrdinalIgnoreCase))
         {
             if (++count[0] > 20000) throw new InvalidDataException("Too many files. Select the thumbnail folder itself instead of a game/drive root.");
-            if (Extensions.Contains(Path.GetExtension(file))) Add(file, null);
-            else if (ResourceArchiveName.IsMatch(Path.GetFileName(file)) || Path.GetFileName(file).Equals("OfflineThumbnails.zip", StringComparison.OrdinalIgnoreCase)) IndexArchive(file);
+            string fileName = Path.GetFileName(file);
+            string decodedName = FH6LocalCryptoTool.Fh3NameCodec.IsEncoded(fileName) ? FH6LocalCryptoTool.Fh3NameCodec.Decode(fileName) : fileName;
+            if (Extensions.Contains(Path.GetExtension(file)) || Extensions.Contains(Path.GetExtension(decodedName))) Add(file, null);
+            else if (ResourceArchiveName.IsMatch(decodedName) || decodedName.Equals("OfflineThumbnails.zip", StringComparison.OrdinalIgnoreCase)) IndexArchive(file);
         }
         foreach (string child in Directory.EnumerateDirectories(folder).OrderBy(p => p, StringComparer.OrdinalIgnoreCase))
         {
@@ -77,18 +89,30 @@ public sealed class CarThumbnailLibrary
         using var archive = ZipFile.OpenRead(path);
         if (archive.Entries.Count > 20000) throw new InvalidDataException("Too many entries in thumbnail archive.");
         foreach (var entry in archive.Entries.OrderBy(e => e.FullName, StringComparer.OrdinalIgnoreCase))
-            if (entry.Length is > 0 and <= MaxImageBytes && Extensions.Contains(Path.GetExtension(entry.Name))) Add(path, entry.FullName);
+        {
+            if (entry.Length is > 0 and <= MaxImageBytes)
+            {
+                string ext = Path.GetExtension(entry.Name);
+                string decName = FH6LocalCryptoTool.Fh3NameCodec.IsEncoded(entry.Name) ? FH6LocalCryptoTool.Fh3NameCodec.Decode(entry.Name) : entry.Name;
+                string decExt = Path.GetExtension(decName);
+                if (Extensions.Contains(ext) || Extensions.Contains(decExt)) Add(path, entry.FullName);
+            }
+        }
     }
 
     void Add(string path, string? zipEntry)
     {
-        string stem = Path.GetFileNameWithoutExtension((zipEntry ?? path).Replace('\\', '/'));
+        string raw = (zipEntry ?? path).Replace('\\', '/');
+        string decoded = FH6LocalCryptoTool.Fh3NameCodec.IsEncoded(raw) ? FH6LocalCryptoTool.Fh3NameCodec.Decode(raw) : raw;
+        string stem = Path.GetFileNameWithoutExtension(decoded);
+        string ext = Path.GetExtension(decoded);
         // Normalize numeric IDs (FH6 pads shorter ordinals to four digits).
         var offline = OfflineName.Match(stem);
         var id = IdName.Match(stem);
         // Resource ZIPs also contain logos/decals with model-like names. Only
         // actual ID-named swatch thumbnails belong in this model preview index.
-        if (Path.GetExtension(zipEntry ?? path).Equals(".swatchbin",StringComparison.OrdinalIgnoreCase) && !id.Success) return;
+        bool isSwatch = ext.Equals(".swatchbin", StringComparison.OrdinalIgnoreCase) || ext.Equals(".~ml1^@`$8", StringComparison.OrdinalIgnoreCase);
+        if (isSwatch && !id.Success) return;
         string key;
         int rank;
         if (offline.Success && long.TryParse(offline.Groups[1].Value, out long offlineId)) { key = offlineId.ToString(CultureInfo.InvariantCulture); rank = offline.Groups[2].Value == "0" ? 1 : 2; }
@@ -100,8 +124,12 @@ public sealed class CarThumbnailLibrary
             rank = 0;
         }
         // The RC*HiRes packs contain larger versions of the same exact car IDs.
-        if (zipEntry != null && Path.GetExtension(zipEntry).Equals(".swatchbin", StringComparison.OrdinalIgnoreCase))
-            rank += Path.GetFileNameWithoutExtension(path).EndsWith("HiRes", StringComparison.OrdinalIgnoreCase) ? -2 : -1;
+        if (zipEntry != null && isSwatch)
+        {
+            string packName = Path.GetFileNameWithoutExtension(path);
+            string decPack = FH6LocalCryptoTool.Fh3NameCodec.IsEncoded(packName) ? FH6LocalCryptoTool.Fh3NameCodec.Decode(packName) : packName;
+            rank += (decPack.EndsWith("HiRes", StringComparison.OrdinalIgnoreCase) || packName.EndsWith("@$4q~", StringComparison.OrdinalIgnoreCase)) ? -2 : -1;
+        }
         if (!_entries.TryGetValue(key, out var old) || rank < old.Rank) _entries[key] = new(path, zipEntry, rank);
     }
 
@@ -130,7 +158,8 @@ public sealed class CarThumbnailLibrary
                     bytes = new byte[checked((int)input.Length)];input.ReadExactly(bytes);
                 }
                 BitmapSource frame;
-                if (Path.GetExtension(entry.ZipEntry ?? entry.File).Equals(".swatchbin", StringComparison.OrdinalIgnoreCase)) frame = SwatchThumbnailDecoder.Decode(bytes);
+                string ext = Path.GetExtension(entry.ZipEntry ?? entry.File);
+                if (ext.Equals(".swatchbin", StringComparison.OrdinalIgnoreCase) || ext.Equals(".~ml1^@`$8", StringComparison.OrdinalIgnoreCase)) frame = SwatchThumbnailDecoder.Decode(bytes);
                 else {
                     using var stream = new MemoryStream(bytes);
                     var decoder = BitmapDecoder.Create(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
@@ -173,15 +202,18 @@ public sealed class CarThumbnailLibrary
             var parent = new DirectoryInfo(Path.GetDirectoryName(Path.GetFullPath(databasePath))!);
             for (int i = 0; parent != null && parent.Parent != null && i < 10; i++, parent = parent.Parent) roots.Add(parent.FullName);
         }
-        roots.AddRange(game == ForzaGame.Horizon5 ? ThumbnailInstallDiscovery.Horizon5GameRoots() : ThumbnailInstallDiscovery.GameRoots(motorsport));
+        if (game == ForzaGame.Horizon5) roots.AddRange(ThumbnailInstallDiscovery.Horizon5GameRoots());
+        else if (game == ForzaGame.Horizon4) roots.AddRange(ThumbnailInstallDiscovery.Horizon4GameRoots());
+        else if (game == ForzaGame.Horizon3) roots.AddRange(ThumbnailInstallDiscovery.Horizon3GameRoots());
+        else if (game == ForzaGame.Horizon6) roots.AddRange(ThumbnailInstallDiscovery.GameRoots(motorsport));
         // Prefer the selected game's full stock packs; keep its offline fallback.
         // Native FM8 ZIPs use LZX compression, which this read-only preview does not extract.
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         // Search all installs for the full packs before offering a sparse offline ZIP.
         foreach (string root in roots) {
-            foreach (string suffix in new[] { "", "Stripped", @"media\Stripped", @"Content\media\Stripped" }) {
+            foreach (string suffix in new[] { "", "Stripped", @"media\Stripped", @"Content\media\Stripped", @"gq6$l\~14$uuq6", @"~14$uuq6" }) {
                 string folder = Path.Combine(root,suffix);
-                if (seen.Add(folder) && Directory.Exists(folder) && File.Exists(Path.Combine(folder,"RC0.zip")) && MatchesGame(folder, game)) yield return folder;
+                if (seen.Add(folder) && Directory.Exists(folder) && (File.Exists(Path.Combine(folder,"RC0.zip")) || File.Exists(Path.Combine(folder,"4^[.,$u"))) && MatchesGame(folder, game)) yield return folder;
             }
         }
         foreach (string root in roots) {
@@ -195,14 +227,19 @@ public sealed class CarThumbnailLibrary
     static bool MatchesGame(string folder, ForzaGame game)
     {
         string database = Path.Combine(folder, "gamedbRC.slt");
+        if (!File.Exists(database)) database = Path.Combine(folder, "{lgq6`4^.~b1");
         if (!File.Exists(database)) return true;
         try
         {
             var format = GameDbContainerFormat.Detect(database);
             return format switch
             {
+                GameDbContainerFormat.Kind.Fh3TransformIt36 => game == ForzaGame.Horizon3,
+                GameDbContainerFormat.Kind.Fh4TransformIt36 => game == ForzaGame.Horizon4,
                 GameDbContainerFormat.Kind.Fh5TransformIt36 => game == ForzaGame.Horizon5,
                 GameDbContainerFormat.Kind.Fh6Aes36 => game == ForzaGame.Horizon6,
+                GameDbContainerFormat.Kind.Fm6ApexTransformIt32 => game == ForzaGame.Motorsport6Apex,
+                GameDbContainerFormat.Kind.Fm7TransformIt32 => game == ForzaGame.Motorsport7,
                 GameDbContainerFormat.Kind.Sqlite => GameDbIdentity.Detect(database) == game,
                 _ => false
             };
@@ -212,7 +249,7 @@ public sealed class CarThumbnailLibrary
 
     static string SettingsFile => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ForzaModTool", "car-thumbnail-sources.json");
     static readonly object SettingsSync = new();
-    static string GameKey(ForzaGame game) => game switch { ForzaGame.Horizon2 => "FH2", ForzaGame.Horizon5 => "FH5", ForzaGame.Horizon6 => "FH6", ForzaGame.Motorsport8 => "FM8", _ => throw new ArgumentException("Choose a supported thumbnail game.", nameof(game)) };
+    static string GameKey(ForzaGame game) => game switch { ForzaGame.Horizon2 => "FH2", ForzaGame.Horizon3 => "FH3", ForzaGame.Horizon4 => "FH4", ForzaGame.Horizon5 => "FH5", ForzaGame.Horizon6 => "FH6", ForzaGame.Motorsport6Apex => "FM6Apex", ForzaGame.Motorsport7 => "FM7", ForzaGame.Motorsport8 => "FM8", _ => throw new ArgumentException("Choose a supported thumbnail game.", nameof(game)) };
     static Dictionary<string, string> ReadSources()
     {
         try {

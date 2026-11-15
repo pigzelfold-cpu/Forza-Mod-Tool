@@ -9,12 +9,12 @@ Check for updates beside the version number checks GitHub. Download update now p
 3. The log shows the output path. Output folder lets you choose another location.
 
 File types
-- GameDB: FH5, FH6 and FM8 SLTs can be decrypted to SQLite and rebuilt. FH2 SLTs are already plain.
-- Settings: supported INI, XML, JSON and text files can be decrypted and rebuilt.
-- ZIPs, including audio: Decrypt extracts them. Keep the original ZIP and metadata in that folder. Drop the folder back to rebuild it; do not add or remove files. External manifests are not updated.
+- GameDB: FH3, FH4, FH5, FH6, FM6 Apex, FM7 and FM8 SLTs can be decrypted to SQLite and rebuilt. FH2 SLTs are already plain.
+- Settings & containers: supported FH3, FH4, FH5, FH6, FM6 Apex, FM7 and FM8 config/asset/photo/reward/dynamic/SFS containers can be decrypted and rebuilt.
+- ZIPs, including audio: Decrypt extracts them (FH3, FH4, FH5, FH6, FM6 Apex, FM7 and FM8). Keep the original ZIP and metadata in that folder. Drop the folder back to rebuild it; do not add or remove files. External manifests are not updated.
 - SKELD: decode to JSON, edit, then rebuild.
 - String tables: drop a .str and Decrypt. Edit or add keys in the JSON's Entries section, then drop the .str.json and Re-encrypt. Keep the other fields. Rename the rebuilt file to its original .str name when installing.
-- Saves: Decrypt writes the complete .decrypted profile. FH6 can be re-encrypted with its original save template. FH5 is decrypt-only.
+- Saves: Decrypt writes the complete .decrypted profile. FH3, FH4, FH5 (latest, v1.619.349.0 and legacy builds), FH6, FM6 Apex and FM7 profiles can be decrypted and re-encrypted with their original save template.
 
 Merging
 - Put the receiving DB on top and the donor below, then Merge. Review conflicts before saving.

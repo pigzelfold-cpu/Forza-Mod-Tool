@@ -34,7 +34,7 @@ public partial class CarEditorView
             var rows = Query($"SELECT Id,Name,{parent} FROM CarBuckets ORDER BY Id");
             _carBuckets = CarBucketCatalog.ReadForGame(rows.Select(r => (Convert.ToInt64(r["Id"]),
                 Convert.ToString(r["Name"], CultureInfo.InvariantCulture) ?? "",
-                r["ParentBucketId"] == null ? (long?)null : Convert.ToInt64(r["ParentBucketId"]))), _origPath, IsFh2 || IsFh5);
+                r["ParentBucketId"] == null ? (long?)null : Convert.ToInt64(r["ParentBucketId"]))), _origPath, _editorGame);
             CarBucketSelector.ItemsSource = _carBuckets;
         }
         catch (Exception ex)
