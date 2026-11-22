@@ -730,10 +730,10 @@
               </Grid.ColumnDefinitions>
               <Button x:Name="AddTrafficBtn" Grid.Column="0" Content="＋ Traffic cars" Style="{StaticResource GhostButton}"
                       IsEnabled="False" Padding="6,5" FontSize="10.5" Margin="0,0,4,0" Click="AddTraffic_Click"
-                      ToolTip="Make every drivable traffic car purchasable in the Autoshow (preserves free-roam traffic spawning and excludes null cars)."/>
+                      ToolTip="Make every traffic, unobtainable, story/special, and restricted car purchasable in the Autoshow (preserves free-roam traffic spawning and excludes null cars)."/>
               <Button x:Name="RemoveTrafficBtn" Grid.Column="1" Content="− Traffic cars" Style="{StaticResource GhostButton}"
                       IsEnabled="False" Padding="6,5" FontSize="10.5" Margin="4,0,0,0" Click="RemoveTraffic_Click"
-                      ToolTip="Hide traffic cars from the Autoshow and restore their traffic-only database flags (keeps performance and swap edits)."/>
+                      ToolTip="Hide traffic and unobtainable cars from the Autoshow and restore their original restricted database flags (keeps performance and swap edits)."/>
             </Grid>
             <Grid Margin="0,7,0,0">
               <Grid.ColumnDefinitions>

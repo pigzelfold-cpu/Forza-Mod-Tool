@@ -68,6 +68,7 @@ internal sealed class ProfileXpEdit(uint driverXp)
         var staged = ProfileContainer.Parse(container.Serialize());
 #if PROFILE_UNLOCK_TESTING
         ProfileGameData.Copy(container, staged);
+        Fh5ProfileGameData.Copy(container, staged);
 #endif
         if (!TryPrepare(staged, out var stagedProperties, out var stagedTotals)) return false;
         for (int i = 0; i < properties.Count; i++)

@@ -474,7 +474,7 @@
           </TextBlock>
           <help:TabHelpButton Topic="ProfileEditor"/>
           </StackPanel>
-          <TextBlock x:Name="StatusLine" Text="no save loaded — click Load C_ProfileData to begin"
+          <TextBlock x:Name="StatusLine" Text="no save loaded — click Load ProfileData to begin"
                      Foreground="{StaticResource Dim}" FontSize="12" Margin="0,3,0,0"/>
         </StackPanel>
 
@@ -484,7 +484,7 @@
           <Button x:Name="ViewPropBtn" Content="Profile Values" Style="{StaticResource GhostButton}" Click="ViewProps_Click" Padding="12,6" Margin="0,0,5,0"/>
           <Button x:Name="ViewSaveBtn" Content="Save State" Style="{StaticResource GhostButton}" Click="ViewSave_Click" Padding="12,6" Margin="0,0,5,0"/>
           <Button x:Name="ViewCareerBtn" Content="Career" Style="{StaticResource GhostButton}" Click="ViewCareer_Click" Padding="12,6" Margin="0,0,14,0"/>
-          <Button Content="📂  Load C_ProfileData" Style="{StaticResource GhostButton}" Click="Load_Click" Margin="0,0,8,0"/>
+          <Button Content="📂  Load ProfileData" Style="{StaticResource GhostButton}" Click="Load_Click" Margin="0,0,8,0"/>
           <Button Content="FH2 save…" Style="{StaticResource GhostButton}" Click="LoadFh2_Click" Margin="0,0,8,0"/>
           <Button x:Name="SaveBtn" Content="Export save" Style="{StaticResource PinkFilled}" IsEnabled="False" Click="Save_Click"/>
         </StackPanel>

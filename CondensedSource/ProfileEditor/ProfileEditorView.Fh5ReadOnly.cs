@@ -55,6 +55,9 @@ public partial class ProfileEditorView
             chips.Children.Add(StatChip(_allProps.Count(p => p.Node.IsEditable).ToString("n0", CultureInfo.InvariantCulture), "editable settings"));
         var career = _container.Career;
         OverviewPanel.Children.Add(chips);
+#if PROFILE_UNLOCK_TESTING
+        AddFh5GameDataControls();
+#endif
 
         // ---- Everyday values ----
         OverviewPanel.Children.Add(SectionHeader("Everyday values"));
@@ -62,6 +65,9 @@ public partial class ProfileEditorView
         everyday += AddProfileEdit("/Main/Credits", "Credits", "your spendable in-game credits") ? 1 : 0;
         everyday += AddProfileEdit("/Main/TotalCredits", "Total Credits (stats)", "lifetime credits recorded in your profile stats") ? 1 : 0;
         everyday += AddDriverXpControls();
+#if PROFILE_UNLOCK_TESTING
+        everyday += AddFh5OnlineXpControls();
+#endif
         everyday += AddProfileEdit("/Main/TotalXP", "Total XP (stats)", "lifetime XP recorded in your profile stats") ? 1 : 0;
         everyday += AddFh5SkillPointsEdit() ? 1 : (AddConsumableEdit(ProfileConsumableState.Kind.SkillPoints, "Skill points", "points currently available to spend") ? 1 : 0);
         everyday += AddFh5WheelspinsEdit(false, "Wheelspins", "normal spins available; prize history stays unchanged") ? 1 : (AddConsumableEdit(ProfileConsumableState.Kind.Wheelspins, "Wheelspins", "normal spins available; prize history stays unchanged") ? 1 : 0);
@@ -85,9 +91,10 @@ public partial class ProfileEditorView
         if (barnFinds >= 0) worldChips.Children.Add(StatChip(barnFinds.ToString("n0", CultureInfo.InvariantCulture), "Barn finds saved"));
         long carUnlocks = TableCountOrNeg("CarExperienceUnlocks");
         if (carUnlocks >= 0) worldChips.Children.Add(StatChip(carUnlocks.ToString("n0", CultureInfo.InvariantCulture), "Car experience unlocks"));
-        var characterItems = career?.Records.FirstOrDefault(record => record.Name == "CharacterCustomisation");
-        if (characterItems != null && CareerSaveStateInsights.TryGetCharacterItemCount(characterItems.Payload, out int characterItemCount))
-            worldChips.Children.Add(StatChip(characterItemCount.ToString("n0", CultureInfo.InvariantCulture), "Character items owned"));
+#if PROFILE_UNLOCK_TESTING
+        if (Fh5ClothingUnlockState.TryReadUnlocked(_container, out var fh5OwnedClothes))
+            worldChips.Children.Add(StatChip(fh5OwnedClothes.Length.ToString("n0", CultureInfo.InvariantCulture), "Character items owned"));
+#endif
         var sites = FindSaveMapValuesByType("FestivalSiteState").ToList();
         if (sites.Count > 0)
         {
@@ -97,6 +104,10 @@ public partial class ProfileEditorView
             worldChips.Children.Add(StatChip($"{visited}/{sites.Count}", "Festival sites visited"));
         }
         OverviewPanel.Children.Add(worldChips);
+#if PROFILE_UNLOCK_TESTING
+        AddFh5RoadDiscoveryControls();
+        AddFh5UnlockControls();
+#endif
 
         if (career != null)
         {
@@ -109,10 +120,12 @@ public partial class ProfileEditorView
                 ("SeasonalPRStuntsSaveState", "seasonal PR stunts"),
                 ("TreasureHuntChallengeSaveState", "Treasure Hunts"),
                 ("PhotoChallengeSaveState", "Photo Challenges"),
+#if !PROFILE_UNLOCK_TESTING
                 ("CarHornSaveState", "car horns"),
                 ("EmoteSaveState", "emotes"),
                 ("QuickChatSaveState", "quick chat phrases"),
                 ("BadgeTitleUnlocks", "badges"),
+#endif
             }.Where(item => available.Contains(item.Item1)).Select(item => item.Item2).ToList();
             if (friendlyRecords.Count > 0)
                 OverviewPanel.Children.Add(Note($"Preserved FH5 progression: {string.Join(", ", friendlyRecords)}. These stay fully intact across edits."));

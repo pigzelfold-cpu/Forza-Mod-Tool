@@ -142,7 +142,12 @@ public partial class ProfileEditorView : UserControl
         _loadedPath = Path.GetFullPath(path);
         _loadedName = Path.GetFileName(path);
 #if PROFILE_UNLOCK_TESTING
-        if (!_isFh5)
+        if (_isFh5)
+        {
+            var fh5GameData = Fh5ProfileGameData.AttachAutomatically(container);
+            Log(fh5GameData.Message, fh5GameData.Loaded ? "ok" : "info");
+        }
+        else
         {
             var gameData = ProfileGameData.AttachAutomatically(container);
             Log(gameData.Message, gameData.Loaded ? "ok" : "info");
@@ -1192,6 +1197,6 @@ public partial class ProfileEditorView : UserControl
     void Fail(string action, Exception ex)
     {
         Log($"{action} failed: {ex.Message}", "err");
-        ProfileMessageWindow.Show(this, "FH6 Profile Editor", ex.Message, confirmation: false);
+        ProfileMessageWindow.Show(this, _isFh5 ? "FH5 Profile Editor" : "FH6 Profile Editor", ex.Message, confirmation: false);
     }
 }

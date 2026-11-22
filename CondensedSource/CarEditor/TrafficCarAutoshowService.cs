@@ -24,6 +24,9 @@ public sealed record TrafficCarBaseline(
     long? IsInstalled,
     long? IsUnicorn,
     long? IsArcade,
+    long? StockWheelId,
+    long? IsCameraCollidable,
+    long? UseBoxCameraCollision,
     long? AllIeIncludeCar,
     long? AllIeIncludeAudio);
 
@@ -32,12 +35,33 @@ public sealed record TrafficCarUnlockResult(int TotalTrafficCars, int NewlyUnloc
 public sealed record TrafficCarRevertResult(int TotalTrafficCars, int NewlyHidden, int RemovedBuckets, int RestoredUnobtainable);
 
 /// <summary>
-/// Cross-game (FH2–FH6) helper that unlocks drivable traffic cars for Autoshow purchase
-/// without deleting the free-roam TrafficCars spawn table or introducing schema/FK violations.
+/// Cross-game (FH2–FH6) helper that unlocks drivable traffic, unobtainable,
+/// bucketless, and flag-restricted cars for Autoshow purchase without deleting
+/// free-roam TrafficCars spawning or introducing schema/FK violations.
 /// </summary>
 public static class TrafficCarAutoshowService
 {
     static readonly long[] NullExcludedIds = { 1215L, 1477L };
+
+    static bool SchemaHasTable(SqliteConnection conn, string db, string table, Func<string, bool> mainTableExists)
+    {
+        if (db == "main") return mainTableExists(table);
+        using var chk = conn.CreateCommand();
+        chk.CommandText = $"SELECT COUNT(*) FROM {db}.sqlite_master WHERE type='table' AND name=@t";
+        chk.Parameters.AddWithValue("@t", table);
+        return Convert.ToInt64(chk.ExecuteScalar()) > 0;
+    }
+
+    static HashSet<string> SchemaColumns(SqliteConnection conn, string db, string table, Func<string, bool> mainTableExists)
+    {
+        var cols = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (!SchemaHasTable(conn, db, table, mainTableExists)) return cols;
+        using var p = conn.CreateCommand();
+        p.CommandText = $"PRAGMA {db}.table_info(\"{table}\")";
+        using var r = p.ExecuteReader();
+        while (r.Read()) cols.Add(r.GetString(1));
+        return cols;
+    }
 
     public static IReadOnlyList<long> ResolveTrafficCarIds(
         SqliteConnection conn,
@@ -46,25 +70,61 @@ public static class TrafficCarAutoshowService
         bool stockReferenceAttached)
     {
         var ids = new SortedSet<long>();
-        if (tableExists("TrafficCars") && hasColumn("TrafficCars", "CarId"))
+
+        void CollectFromSchema(string db)
         {
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = "SELECT DISTINCT CarId FROM main.TrafficCars WHERE CarId IS NOT NULL";
-            using var r = cmd.ExecuteReader();
-            while (r.Read()) ids.Add(r.GetInt64(0));
-        }
-        if (stockReferenceAttached)
-        {
-            using var chk = conn.CreateCommand();
-            chk.CommandText = "SELECT COUNT(*) FROM stockref.sqlite_master WHERE type='table' AND name='TrafficCars'";
-            if (Convert.ToInt64(chk.ExecuteScalar()) > 0)
+            var tcCols = SchemaColumns(conn, db, "TrafficCars", tableExists);
+            if (tcCols.Contains("CarId"))
             {
                 using var cmd = conn.CreateCommand();
-                cmd.CommandText = "SELECT DISTINCT CarId FROM stockref.TrafficCars WHERE CarId IS NOT NULL";
+                cmd.CommandText = $"SELECT DISTINCT CarId FROM {db}.TrafficCars WHERE CarId IS NOT NULL";
+                using var r = cmd.ExecuteReader();
+                while (r.Read()) ids.Add(r.GetInt64(0));
+            }
+
+            var unobtCols = SchemaColumns(conn, db, "UnobtainableCars", tableExists);
+            if (unobtCols.Contains("Ordinal"))
+            {
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = $@"SELECT DISTINCT CASE WHEN Ordinal < -1000000000 THEN -1000000000 - Ordinal ELSE Ordinal END
+                                     FROM {db}.UnobtainableCars WHERE Ordinal IS NOT NULL";
+                using var r = cmd.ExecuteReader();
+                while (r.Read()) ids.Add(r.GetInt64(0));
+            }
+
+            var dcCols = SchemaColumns(conn, db, "Data_Car", tableExists);
+            if (!dcCols.Contains("Id")) return;
+
+            var bktCols = SchemaColumns(conn, db, "Data_Car_Buckets", tableExists);
+            if (bktCols.Contains("CarId") && bktCols.Contains("CarBucket"))
+            {
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = $@"SELECT c.Id FROM {db}.Data_Car c
+                                     WHERE NOT EXISTS (
+                                         SELECT 1 FROM {db}.Data_Car_Buckets b
+                                         WHERE b.CarId = c.Id AND b.CarBucket IS NOT NULL AND b.CarBucket > 0
+                                     )";
+                using var r = cmd.ExecuteReader();
+                while (r.Read()) ids.Add(r.GetInt64(0));
+            }
+
+            var conds = new List<string>();
+            if (dcCols.Contains("IsDrivable")) conds.Add("(IsDrivable IS NOT NULL AND IsDrivable<>1)");
+            if (dcCols.Contains("IsPurchased")) conds.Add("(IsPurchased IS NOT NULL AND IsPurchased<>1)");
+            if (dcCols.Contains("IsInstalled")) conds.Add("(IsInstalled IS NOT NULL AND IsInstalled<>1)");
+            if (dcCols.Contains("IsUnicorn")) conds.Add("(IsUnicorn IS NOT NULL AND IsUnicorn<>0)");
+            if (dcCols.Contains("VisibleOnlyIfOwned")) conds.Add("(VisibleOnlyIfOwned IS NOT NULL AND VisibleOnlyIfOwned<>0)");
+            if (conds.Count > 0)
+            {
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = $"SELECT Id FROM {db}.Data_Car WHERE {string.Join(" OR ", conds)}";
                 using var r = cmd.ExecuteReader();
                 while (r.Read()) ids.Add(r.GetInt64(0));
             }
         }
+
+        CollectFromSchema("main");
+        if (stockReferenceAttached) CollectFromSchema("stockref");
         if (ids.Count == 0) return Array.Empty<long>();
 
         var nullFilterIds = new HashSet<long>(NullExcludedIds);
@@ -85,8 +145,7 @@ public static class TrafficCarAutoshowService
             {
                 long id = r.GetInt64(0);
                 string media = r.IsDBNull(1) ? "" : r.GetString(1);
-                if (media.Contains("NUL", StringComparison.OrdinalIgnoreCase) ||
-                    media.Contains("TransitSSV", StringComparison.OrdinalIgnoreCase))
+                if (media.Contains("NUL", StringComparison.OrdinalIgnoreCase))
                 {
                     nullFilterIds.Add(id);
                     continue;
@@ -132,36 +191,22 @@ public static class TrafficCarAutoshowService
         Func<string, bool> tableExists,
         Func<string, string, bool> hasColumn)
     {
-        bool SchemaHasTable(string table)
-        {
-            if (db == "main") return tableExists(table);
-            using var chk = conn.CreateCommand();
-            chk.CommandText = $"SELECT COUNT(*) FROM {db}.sqlite_master WHERE type='table' AND name=@t";
-            chk.Parameters.AddWithValue("@t", table);
-            return Convert.ToInt64(chk.ExecuteScalar()) > 0;
-        }
-        HashSet<string> SchemaColumns(string table)
-        {
-            if (db == "main" && !SchemaHasTable(table)) return new(StringComparer.OrdinalIgnoreCase);
-            var s = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            using var p = conn.CreateCommand();
-            p.CommandText = $"PRAGMA {db}.table_info(\"{table}\")";
-            using var r = p.ExecuteReader();
-            while (r.Read()) s.Add(r.GetString(1));
-            return s;
-        }
+        bool HasTable(string table) => SchemaHasTable(conn, db, table, tableExists);
+        HashSet<string> Columns(string table) => SchemaColumns(conn, db, table, tableExists);
 
-        var dcCols = SchemaColumns("Data_Car");
+        var dcCols = Columns("Data_Car");
         string ColOrNull(string c) => dcCols.Contains(c) ? $"\"{c}\"" : $"NULL AS \"{c}\"";
 
         string media = "";
         long? cid = null, notAv = null, visOwn = null, noAh = null, drv = null, pur = null, ins = null, uni = null, arc = null;
+        long? stockWheelId = null, isCamCollidable = null, useBoxCamCollision = null;
         using (var cmd = conn.CreateCommand())
         {
             cmd.CommandText = $@"SELECT MediaName, {ColOrNull("ContentId")}, {ColOrNull("NotAvailableInAutoshow")},
                                         {ColOrNull("VisibleOnlyIfOwned")}, {ColOrNull("NotAvailableInAuctionHouse")},
                                         {ColOrNull("IsDrivable")}, {ColOrNull("IsPurchased")}, {ColOrNull("IsInstalled")},
-                                        {ColOrNull("IsUnicorn")}, {ColOrNull("IsArcade")}
+                                        {ColOrNull("IsUnicorn")}, {ColOrNull("IsArcade")},
+                                        {ColOrNull("StockWheelID")}, {ColOrNull("IsCameraCollidable")}, {ColOrNull("UseBoxCameraCollision")}
                                  FROM {db}.Data_Car WHERE Id=@id";
             cmd.Parameters.AddWithValue("@id", carId);
             using var r = cmd.ExecuteReader();
@@ -177,11 +222,14 @@ public static class TrafficCarAutoshowService
                 ins = ReadNullableLong(r, 7);
                 uni = ReadNullableLong(r, 8);
                 arc = ReadNullableLong(r, 9);
+                stockWheelId = ReadNullableLong(r, 10);
+                isCamCollidable = ReadNullableLong(r, 11);
+                useBoxCamCollision = ReadNullableLong(r, 12);
             }
         }
 
         bool inUnobt = false;
-        if (SchemaHasTable("UnobtainableCars"))
+        if (HasTable("UnobtainableCars"))
         {
             using var cmd = conn.CreateCommand();
             cmd.CommandText = $"SELECT COUNT(*) FROM {db}.UnobtainableCars WHERE Ordinal=@id";
@@ -190,9 +238,9 @@ public static class TrafficCarAutoshowService
         }
 
         long? bktId = null, bktHero = null;
-        if (SchemaHasTable("Data_Car_Buckets"))
+        if (HasTable("Data_Car_Buckets"))
         {
-            var bCols = SchemaColumns("Data_Car_Buckets");
+            var bCols = Columns("Data_Car_Buckets");
             using var cmd = conn.CreateCommand();
             cmd.CommandText = bCols.Contains("BucketHero")
                 ? $"SELECT CarBucket, BucketHero FROM {db}.Data_Car_Buckets WHERE CarId=@id"
@@ -207,7 +255,7 @@ public static class TrafficCarAutoshowService
         }
 
         bool hasOnDisc = false;
-        if (SchemaHasTable("OnDiscContent"))
+        if (HasTable("OnDiscContent"))
         {
             using var cmd = conn.CreateCommand();
             cmd.CommandText = $"SELECT COUNT(*) FROM {db}.OnDiscContent WHERE ContentType=1 AND ContentId=@id";
@@ -216,9 +264,9 @@ public static class TrafficCarAutoshowService
         }
 
         long? ieCar = null, ieAudio = null;
-        if (SchemaHasTable("AllIECars"))
+        if (HasTable("AllIECars"))
         {
-            var ieCols = SchemaColumns("AllIECars");
+            var ieCols = Columns("AllIECars");
             if (ieCols.Contains("IncludeCar") && ieCols.Contains("IncludeEngineUpgradeAudio"))
             {
                 using var cmd = conn.CreateCommand();
@@ -233,10 +281,11 @@ public static class TrafficCarAutoshowService
             }
         }
 
-        bool wasUnlockedAtCapture = IsCarUnlockedForAutoshow(conn, carId, SchemaHasTable, (t, c) => SchemaColumns(t).Contains(c));
+        bool wasUnlockedAtCapture = IsCarUnlockedForAutoshow(conn, carId, HasTable, (t, c) => Columns(t).Contains(c));
         return new TrafficCarBaseline(
             carId, media, db == "stockref", wasUnlockedAtCapture,
-            inUnobt, bktId, bktHero, hasOnDisc, cid, notAv, visOwn, noAh, drv, pur, ins, uni, arc, ieCar, ieAudio);
+            inUnobt, bktId, bktHero, hasOnDisc, cid, notAv, visOwn, noAh, drv, pur, ins, uni, arc,
+            stockWheelId, isCamCollidable, useBoxCamCollision, ieCar, ieAudio);
     }
 
     public static bool IsCarUnlockedForAutoshow(
@@ -278,8 +327,9 @@ public static class TrafficCarAutoshowService
         if (tableExists("UnobtainableCars") && hasColumn("UnobtainableCars", "Ordinal"))
         {
             using var cmd = conn.CreateCommand();
-            cmd.CommandText = "SELECT COUNT(*) FROM main.UnobtainableCars WHERE Ordinal=@id";
-            cmd.Parameters.AddWithValue("@id", carId);
+            cmd.CommandText = "SELECT COUNT(*) FROM main.UnobtainableCars WHERE Ordinal=@a OR Ordinal=@b";
+            cmd.Parameters.AddWithValue("@a", carId);
+            cmd.Parameters.AddWithValue("@b", -1000000000L - carId);
             if (Convert.ToInt64(cmd.ExecuteScalar()) > 0) return false;
         }
 
@@ -313,6 +363,18 @@ public static class TrafficCarAutoshowService
             bool hasOffersMap = tableExists("ContentOffersMapping") && hasColumn("ContentOffersMapping", "ContentId") && hasColumn("ContentOffersMapping", "ContentType");
             bool hasAllIe = tableExists("AllIECars") && hasColumn("AllIECars", "Id") && hasColumn("AllIECars", "IncludeCar") && hasColumn("AllIECars", "IncludeEngineUpgradeAudio");
 
+            long? fallbackStockWheelId = null;
+            if (hasColumn("Data_Car", "StockWheelID") &&
+                tableExists("List_Wheels") &&
+                hasColumn("List_Wheels", "ID") &&
+                hasColumn("List_Wheels", "MediaName"))
+            {
+                string wheelOrder = hasColumn("List_Wheels", "IsStock") ? "ORDER BY IsStock DESC, ID ASC" : "ORDER BY ID ASC";
+                object? rawWheelId = Scalar(conn, $"SELECT ID FROM main.List_Wheels WHERE MediaName='PG_BoxTruck_14' {wheelOrder} LIMIT 1");
+                if (rawWheelId != null)
+                    fallbackStockWheelId = Convert.ToInt64(rawWheelId);
+            }
+
             long nextOnDiscId = hasOnDisc
                 ? Convert.ToInt64(Scalar(conn, "SELECT COALESCE(MAX(Id),0) FROM main.OnDiscContent") ?? 0L) + 1
                 : 1;
@@ -333,6 +395,15 @@ public static class TrafficCarAutoshowService
                 if (hasColumn("Data_Car", "VisibleOnlyIfOwned")) setClauses.Add("VisibleOnlyIfOwned=0");
                 if (hasColumn("Data_Car", "NotAvailableInAuctionHouse")) setClauses.Add("NotAvailableInAuctionHouse=0");
                 if (hasColumn("Data_Car", "BaseCost")) setClauses.Add("BaseCost=CASE WHEN BaseCost IS NULL OR BaseCost<0 THEN 0 ELSE BaseCost END");
+                if (hasColumn("Data_Car", "IsCameraCollidable")) setClauses.Add("IsCameraCollidable=0");
+                if (hasColumn("Data_Car", "UseBoxCameraCollision")) setClauses.Add("UseBoxCameraCollision=0");
+                if (fallbackStockWheelId.HasValue)
+                {
+                    setClauses.Add($@"StockWheelID=CASE WHEN StockWheelID IS NULL
+                        OR NOT EXISTS (SELECT 1 FROM main.List_Wheels w WHERE w.ID=Data_Car.StockWheelID)
+                        OR EXISTS (SELECT 1 FROM main.List_Wheels w WHERE w.ID=Data_Car.StockWheelID AND (w.MediaName LIKE '%PTCruiser%' OR w.MediaName LIKE '%NUL%'))
+                        THEN {fallbackStockWheelId.Value} ELSE StockWheelID END");
+                }
                 if (hasColumn("Data_Car", "ContentId"))
                 {
                     if (game == ForzaGame.Horizon2)
@@ -341,7 +412,7 @@ public static class TrafficCarAutoshowService
                     }
                     else if (hasOffersMap)
                     {
-                        setClauses.Add(@"ContentId=CASE WHEN ContentId IS NOT NULL AND ContentId<>0 AND ContentId<>99
+                        setClauses.Add(@"ContentId=CASE WHEN ContentId IS NOT NULL AND ContentId<>0
                             AND NOT EXISTS (SELECT 1 FROM main.ContentOffersMapping m WHERE m.ContentType=1 AND (m.ContentId=CAST(Data_Car.Id AS TEXT) OR m.ContentId=Data_Car.Id))
                             THEN 0 ELSE ContentId END");
                     }
@@ -463,6 +534,12 @@ public static class TrafficCarAutoshowService
                 TryAdd("IsArcade", baseline?.IsArcade, 0L);
                 if (hasColumn("Data_Car", "ContentId") && baseline?.ContentId != null)
                     setters.Add(("ContentId", baseline.ContentId.Value));
+                if (hasColumn("Data_Car", "StockWheelID") && baseline?.StockWheelId != null)
+                    setters.Add(("StockWheelID", baseline.StockWheelId.Value));
+                if (hasColumn("Data_Car", "IsCameraCollidable") && baseline?.IsCameraCollidable != null)
+                    setters.Add(("IsCameraCollidable", baseline.IsCameraCollidable.Value));
+                if (hasColumn("Data_Car", "UseBoxCameraCollision") && baseline?.UseBoxCameraCollision != null)
+                    setters.Add(("UseBoxCameraCollision", baseline.UseBoxCameraCollision.Value));
 
                 if (setters.Count > 0)
                 {
@@ -564,11 +641,30 @@ public static class TrafficCarAutoshowService
             return null;
         }
 
-        if (u.Contains("BUS") || u.Contains("TRUCK") || u.Contains("TRANSIT") || u.Contains("GRITTER") ||
-            u.Contains("TRACTOR") || u.Contains("ACTY") || u.Contains("FX4") || u.Contains("TAXI") || u.Contains("VANDURA"))
+        if (u.Contains("BUS") || u.Contains("TRUCK") || u.Contains("FLATBED") || u.Contains("FLOAT") ||
+            u.Contains("TRANSIT") || u.Contains("GRITTER") || u.Contains("TRACTOR") ||
+            u.Contains("ACTY") || u.Contains("FX4") || u.Contains("TAXI") || u.Contains("VANDURA"))
         {
             long? hit = PickByNames("Vans and Utility", "Utility Heroes", "Trucks")
                 ?? PickByFallbackIds(38, 16, 45);
+            if (hit.HasValue) return hit.Value;
+        }
+        else if (u.Contains("BONESHAKERMT") || u.Contains("_MT_"))
+        {
+            long? hit = PickByNames("Unlimited Offroad", "Offroad", "Trucks")
+                ?? PickByFallbackIds(38, 40, 45);
+            if (hit.HasValue) return hit.Value;
+        }
+        else if (u.Contains("METRO6R4"))
+        {
+            long? hit = PickByNames("Rally Monsters", "Retro Rally", "Iconic Rally")
+                ?? PickByFallbackIds(34, 32, 4);
+            if (hit.HasValue) return hit.Value;
+        }
+        else if (u.Contains("WELLINGTON"))
+        {
+            long? hit = PickByNames("Hypercars", "Modern Supercars", "Extreme Track Toys")
+                ?? PickByFallbackIds(13, 11, 26);
             if (hit.HasValue) return hit.Value;
         }
         else if (u.Contains("X5M") || u.Contains("DEFENDER") || u.Contains("WRANGLER") || u.Contains("G65") ||
@@ -585,7 +681,7 @@ public static class TrafficCarAutoshowService
                 ?? PickByFallbackIds(21, 22, 24);
             if (hit.HasValue) return hit.Value;
         }
-        else if (u.Contains("FIESTA") || u.Contains("500ABARTH") || u.Contains("PUNTO") || u.Contains("_KA_") ||
+        else if (u.Contains("FIESTA") || u.Contains("FOCUS") || u.Contains("500ABARTH") || u.Contains("PUNTO") || u.Contains("_KA_") ||
                  u.Contains("_FOX_") || u.Contains("CEED") || u.Contains("YARIS") || u.Contains("JOHNCOOPER") ||
                  u.Contains("MAZDASPEED3") || u.Contains("HON_E_"))
         {

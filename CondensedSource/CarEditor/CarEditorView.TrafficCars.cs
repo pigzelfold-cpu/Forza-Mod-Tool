@@ -61,14 +61,14 @@ public partial class CarEditorView
         AddTrafficBtn.IsEnabled = RemoveTrafficBtn.IsEnabled = enabled;
         if (enabled)
         {
-            AddTrafficBtn.ToolTip = $"Make all {_trafficCarIds.Count} drivable traffic cars purchasable in the Autoshow (preserves free-roam TrafficCars spawning and excludes null cars).";
-            RemoveTrafficBtn.ToolTip = $"Hide all {_trafficCarIds.Count} traffic cars back from the Autoshow (restores traffic-only flags/buckets/UnobtainableCars without altering performance or swaps).";
+            AddTrafficBtn.ToolTip = $"Make all {_trafficCarIds.Count} traffic, unobtainable, story/special, and non-drivable cars purchasable in the Autoshow (preserves free-roam TrafficCars spawning and excludes null cars).";
+            RemoveTrafficBtn.ToolTip = $"Hide all {_trafficCarIds.Count} traffic/unobtainable cars back from the Autoshow (restores original flags, buckets, and UnobtainableCars without altering performance or swaps).";
         }
         else
         {
             string reason = (!HasAutoshow && !IsFh2)
                 ? "Motorsport schemas do not use Horizon Autoshow traffic unlocks."
-                : "No unlockable traffic cars found in this database.";
+                : "No unlockable traffic or unobtainable cars found in this database.";
             AddTrafficBtn.ToolTip = RemoveTrafficBtn.ToolTip = reason;
         }
     }
@@ -103,7 +103,7 @@ public partial class CarEditorView
                 if (res.AddedBuckets > 0) parts.Add($"{res.AddedBuckets} bucket(s) assigned");
                 if (res.ClearedUnobtainable > 0) parts.Add($"{res.ClearedUnobtainable} removed from UnobtainableCars");
                 if (res.AddedOnDisc > 0) parts.Add($"{res.AddedOnDisc} added to OnDiscContent");
-                Log($"✓ unlocked all {res.TotalTrafficCars} traffic cars for Autoshow · {string.Join(" · ", parts)} (free-roam TrafficCars table preserved)", "ok");
+                Log($"✓ unlocked all {res.TotalTrafficCars} traffic/unobtainable cars for Autoshow · {string.Join(" · ", parts)} (free-roam TrafficCars table preserved)", "ok");
             }
             else
             {
@@ -114,7 +114,7 @@ public partial class CarEditorView
                 var parts = new List<string> { $"{res.NewlyHidden} newly hidden" };
                 if (res.RemovedBuckets > 0) parts.Add($"{res.RemovedBuckets} bucket(s) removed");
                 if (res.RestoredUnobtainable > 0) parts.Add($"{res.RestoredUnobtainable} restored to UnobtainableCars");
-                Log($"reverted {res.TotalTrafficCars} traffic cars back to traffic-only status · {string.Join(" · ", parts)}", "warn");
+                Log($"reverted {res.TotalTrafficCars} traffic/unobtainable cars back to restricted status · {string.Join(" · ", parts)}", "warn");
             }
         }
         catch (Exception ex)

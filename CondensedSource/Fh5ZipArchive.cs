@@ -61,6 +61,32 @@ public static class Fh5ZipArchive
         return new(archive.Entries.Count, archive.Entries.Count(e => e.Method == 22 && !e.Directory), total, Path.GetFileName(path));
     }
 
+    internal static Dictionary<string, byte[]> ReadEntries(string source, IReadOnlySet<string> wantedFileNames)
+        => ReadEntries(source, name => wantedFileNames.Contains(Path.GetFileName(name)));
+
+    internal static Dictionary<string, byte[]> ReadEntriesByExtension(string source, string extension)
+        => ReadEntries(source, name => Path.GetExtension(name).Equals(extension, StringComparison.OrdinalIgnoreCase));
+
+    static Dictionary<string, byte[]> ReadEntries(string source, Func<string, bool> match)
+    {
+        using var file = Open(source);
+        var archive = Parse(file);
+        var result = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
+        long decoded = 0;
+        foreach (var entry in archive.Entries)
+        {
+            if (entry.Directory || !match(entry.Name)) continue;
+            if (entry.Size > 20_000_000 || (decoded += entry.Size) > 268_435_456)
+                throw new InvalidDataException("Decoded ZIP entries exceed size limits.");
+            string key = Path.GetFileName(entry.Name);
+            using var output = new MemoryStream(checked((int)entry.Size));
+            Decode(file, entry, output);
+            if (!result.TryAdd(key, output.ToArray()))
+                throw new InvalidDataException("Duplicate ZIP entry name: " + key);
+        }
+        return result;
+    }
+
     public static ExtractResult Extract(string source, string outputDirectory, IProgress<Progress>? progress = null)
     {
         using var file = Open(source); var archive = Parse(file);

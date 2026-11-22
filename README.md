@@ -1,4 +1,4 @@
-# Forza Mod Tool — Community Fork (based on 1.3.0.6)
+# Forza Mod Tool — Community Fork (based on 1.3.0.7)
 
 Community fork of [HTTPJXRDN/Forza-Mod-Tool](https://github.com/HTTPJXRDN/Forza-Mod-Tool), expanded to edit supported GameDB, asset, archive, and profile save files across **FH2, FH3, FH4, FH5, FH6, FM6 Apex, FM7, and Forza Motorsport (FM8)**.
 
@@ -12,7 +12,7 @@ Community fork of [HTTPJXRDN/Forza-Mod-Tool](https://github.com/HTTPJXRDN/Forza-
 | FM6 Apex / FM7 | Decrypt in Crypto, edit SQLite, re-encrypt | Decrypt/re-encrypt in Crypto | No | Authenticated TransformIT & ZIPs |
 | FM8 | Decrypt in Crypto, edit SQLite, re-encrypt | No | No | Authenticated assets & LZX ZIPs |
 
-**Added in this fork (on top of v1.3.0.6):**
+**Added in this fork (on top of v1.3.0.7):**
 - **Traffic Cars in Autoshow (FH2–FH6):** One-click **＋ Traffic cars** unlock and **− Traffic cars** revert in Car Editor, preserving free-roam `TrafficCars`, valid child `CarBucket` categories, stock prices, and foreign-key / `CarStockRestore` integrity.
 - **Full FH3 & FH4 support + FM7 / FM6 Apex crypto:** Native TransformIT GameDB/asset/ZIP codecs, FH3 obfuscated filename support, embedded FH3 (542 cars) and FH4 (783 cars) stock databases, localized car/bucket names, thumbnails, and native suspension/tire options.
 - **FH5 Profile Editor, Festival Playlist & Save Swap:** Edit FH5 Credits, `/Main/TotalXP`, Skill Points, Wheelspins/Super Wheelspins, Festival Playlist completion, Garage Viewer inventory, and swap donor saves (with **Find save** auto-discovery for FH5 & FH6).
