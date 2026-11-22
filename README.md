@@ -7,7 +7,7 @@ Community fork of [HTTPJXRDN/Forza-Mod-Tool](https://github.com/HTTPJXRDN/Forza-
 | FH2 | Open plain SLT or SQLite; Autoshow traffic unlock & stock DB restore | Azimuth revision saves | No | Legacy TFIT / Azimuth helpers |
 | FH3 | Open encrypted `.~b1`/SLT directly (with name de-obfuscation) & stock DB | Decrypt/re-encrypt in Crypto | No | Authenticated TransformIT & ZIPs |
 | FH4 | Open SLT directly or SQLite; Autoshow traffic unlock & stock DB | Decrypt/re-encrypt in Crypto | No | Authenticated TransformIT & ZIPs |
-| FH5 | Open SLT directly or SQLite; Autoshow traffic unlock & stock DB | Full Profile Editor (inc. Playlist) & Garage Viewer | Yes | Authenticated saves, ZIPs, strings & INI |
+| FH5 | Open SLT directly or SQLite; Autoshow traffic unlock & stock DB | Full Profile Editor (Balances, Online XP, Roads, Unlocks, Accolades, Playlist) & Garage Viewer | Yes | Authenticated saves, ZIPs, strings & INI |
 | FH6 | Open SLT directly or SQLite; Autoshow traffic unlock & stock DB | Yes (Balances, Unlocks, Journal, Playlist, Garage) | Yes | Full GameDB, ZIPs, strings & saves |
 | FM6 Apex / FM7 | Decrypt in Crypto, edit SQLite, re-encrypt | Decrypt/re-encrypt in Crypto | No | Authenticated TransformIT & ZIPs |
 | FM8 | Decrypt in Crypto, edit SQLite, re-encrypt | No | No | Authenticated assets & LZX ZIPs |
@@ -15,7 +15,7 @@ Community fork of [HTTPJXRDN/Forza-Mod-Tool](https://github.com/HTTPJXRDN/Forza-
 **Added in this fork (on top of v1.3.0.7):**
 - **Traffic Cars in Autoshow (FH2–FH6):** One-click **＋ Traffic cars** unlock and **− Traffic cars** revert in Car Editor, preserving free-roam `TrafficCars`, valid child `CarBucket` categories, stock prices, and foreign-key / `CarStockRestore` integrity.
 - **Full FH3 & FH4 support + FM7 / FM6 Apex crypto:** Native TransformIT GameDB/asset/ZIP codecs, FH3 obfuscated filename support, embedded FH3 (542 cars) and FH4 (783 cars) stock databases, localized car/bucket names, thumbnails, and native suspension/tire options.
-- **FH5 Profile Editor, Festival Playlist & Save Swap:** Edit FH5 Credits, `/Main/TotalXP`, Skill Points, Wheelspins/Super Wheelspins, Festival Playlist completion, Garage Viewer inventory, and swap donor saves (with **Find save** auto-discovery for FH5 & FH6).
+- **FH5 Profile Editor, Unlocks, Accolades, Playlist & Save Swap:** Edit FH5 Credits, `/Main/TotalXP`, Horizon Open XP (Ranks 1–1,000), Skill Points, Wheelspins/Super Wheelspins, Forzathon Points, Road Discovery (24,498 segments / 578 roads), Clothing, Car Horns, Emotes, Forza Link phrases, Badges + UTC earned dates, **Accolades** (2,237 accolades across 22 collections with Complete/Reset/Sync), Festival Playlist completion, Garage Viewer inventory, and swap donor saves (with **Find save** auto-discovery for FH5 & FH6).
 - **Car Editor Speed & Engine Upgrade Fix:** Indexed/cached bulk engine & motor swaps plus missing Engine-category upgrade generation (**Unlock engine upgrades**).
 
 See [CHANGELOG.md](CHANGELOG.md) for the complete fork and upstream changelog.
@@ -29,7 +29,7 @@ See [CHANGELOG.md](CHANGELOG.md) for the complete fork and upstream changelog.
   - [FH2/Azimuth save location](#fh2azimuth-save-location)
 - [Choose a tab](#choose-a-tab)
   - [Car Editor](#car-editor-change-a-car)
-  - [Profile Editor](#profile-editor-balances-unlocks-and-journal)
+  - [Profile Editor](#profile-editor-balances-unlocks-and-journal--accolades)
   - [Garage Viewer](#garage-viewer-manage-owned-cars)
   - [FH2 save editing](#fh2-save-editing)
   - [Animation Swap](#animation-swap-change-animations)
@@ -112,7 +112,7 @@ Keep the existing numbered folders inside `revisions`; their numbers change as t
 | Tab | What it does | What to load |
 |---|---|---|
 | **Car Editor** | Change availability (including Traffic cars in FH2–FH6), upgrades, engines, buckets, power and fitment | FH2/FH3/FH4/FH5/FH6 SLT or SQLite; FM7/FM6 Apex/FM8 (decrypt FM8 first) |
-| **Profile Editor** | Edit balances, XP, unlocks, Playlist completion and supported tables | FH6 `C_ProfileData`, FH5 `ProfileData`, or FH2/Azimuth revision |
+| **Profile Editor** | Edit balances, XP, roads, unlocks, Journal/Accolades, Playlist completion and supported tables | FH6 `C_ProfileData`, FH5 `ProfileData`, or FH2/Azimuth revision |
 | **Garage Viewer** | Add/remove cars and edit owned-car fields | FH6 `C_ProfileData`, FH5 `ProfileData`, or FH2/Azimuth revision |
 | **Animation Swap** | Swap door animations and adjust supported channels | A copied car ZIP or `carclips_<ID>.clipd` |
 | **Save Swap** | Copy another save's progress into your account's container (with **Find save**) | Two copied, encrypted FH5 `ProfileData` or FH6 `C_ProfileData` saves |
@@ -150,17 +150,17 @@ Without `MediaPC\stripped\stringtables`, Auto reads the stock tables in `media\s
 
 Test with a fresh Autoshow copy of the edited car. An old garage instance can retain incompatible upgrade references.
 
-### Profile Editor: balances, unlocks and Journal
+### Profile Editor: balances, unlocks and Journal / Accolades
 
-1. Click **Load save** and load a working copy of your FH6 `C_ProfileData` or FH5 `ProfileData` save (or **FH2 save…** for Azimuth).
+1. Click **Load ProfileData** and load a working copy of your FH6 `C_ProfileData` or FH5 `ProfileData` save (or **FH2 save…** for Azimuth).
 2. Use **Overview**. Enter a balance or XP value, then click its **Apply** button. XP edits also synchronize `/Main/TotalXP` alongside `/Main/XP`; level/prestige previews do not grant level-up rewards.
-3. For FH6 clothes, horns, emotes, phrases or badges, open the list under the button, search/select items, then click **Unlock selected**. For FH5, edit Credits, Total Credits, Total XP, Skill points, Wheelspins, Super Wheelspins, Festival Playlist completion, and paginated raw profile tables directly (saves re-encrypt automatically on export).
-4. For Collection Journal, select **rows**, then click **Complete selected challenges**. The tickboxes show status; they are not buttons. Clear filters before selecting the whole Journal.
+3. For clothes, horns, emotes, Forza Link phrases, or badges (both FH6 and FH5), open the list under the button, search/select items, then click **Unlock selected**. For FH5, click **Discover all roads** to fill all 24,498 Hendrix road segments (578 roads), or edit Credits, Total Credits, Horizon Open XP, Skill points, Wheelspins, Super Wheelspins, Forzathon Points, Festival Playlist completion, and paginated raw profile tables directly (saves re-encrypt automatically on export).
+4. For **Collection Journal** (FH6) or **Accolades** (FH5), filter/select **rows**, then click **Complete selected challenges** (FH6) or **Complete selected accolades** / **Reset selected accolades** / **Sync points & collections** (FH5). The tickboxes show status; they are not buttons. Clear filters before selecting all items.
 5. Click **Export save** and save a separate output.
 
-Driver XP retention was tested after earning XP and restarting. Online XP editing shows its own level and linked Driver XP previews; Online XP persistence remains unconfirmed. **Complete playlist** completes the selected series, its seasons and activities, and updates Playlist History points while leaving rewards unclaimed (supporting both FH6 and FH5 Festival Playlist saves). Older series can be completed even without saved progress, using matching game data.
+Driver XP retention was tested after earning XP and restarting. Online XP editing shows its own level/rank and linked Driver XP previews; Online XP persistence remains unconfirmed. **Complete playlist** completes the selected series, its seasons and activities, and updates Playlist History points while leaving rewards unclaimed (supporting both FH6 and FH5 Festival Playlist saves). Older series can be completed even without saved progress, using matching game data.
 
-If Playlist completion is unavailable, click **Choose game data…** beside it and select `<FH6>\media\ObjectModelGame.zip`. The tool remembers this location.
+If game definitions or Playlist completion are unavailable, click **Choose game data…** (FH6: `<FH6>\media\ObjectModelGame.zip`) or **Choose FH5 game data…** (FH5: `<FH5>\media\stripped\TIDETables.zip` or extracted `TIDETables` folder). The tool remembers these locations.
 
 Journal completion also updates supported race, PR stunt, job and world progress. Better personal bests are kept. Linked horns and phrases complete their required Journal progress. To discover regions, complete all ten region rows together. The [Collection Journal guide](CondensedSource/docs/ADVANCED_GUIDE.md#collection-journal) covers result values and limits.
 
