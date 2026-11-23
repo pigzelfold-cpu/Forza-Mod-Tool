@@ -3,7 +3,7 @@ using System.Globalization;
 namespace FH6LocalCryptoTool;
 
 /// <summary>One validated, atomic XP edit shared by the driver and online controls.</summary>
-internal sealed class ProfileXpEdit(uint driverXp)
+internal sealed class ProfileXpEdit(uint driverXp, bool isFh3 = false)
 {
     internal const string CareerPrefix = "CurrencyBucket_CareerXP_";
     const string OnlineKey = "CurrencyBucket_HorizonOpenXP_HorizonOpenXP";
@@ -12,8 +12,10 @@ internal sealed class ProfileXpEdit(uint driverXp)
     // TotalXP (u64) tracks lifetime earned XP displayed in in-game stats; mirror it as well.
     // Main/Level does not mirror it directly (it represents level within prestige); preserve it.
     static readonly string[] DriverPaths = { "/Main/XP", "/Main/TotalXP", "/Main/TotalSkills", "/CompareStats/WristbandLevel" };
+    // In FH3, /Main/TotalSkills tracks Fans instead of XP, and /Main/Level tracks the tier-local index.
+    static readonly string[] Fh3DriverPaths = { "/Main/XP", "/Main/TotalXP", "/CompareStats/WristbandLevel" };
     sealed record PropertyChange(string Path, ulong Before, ulong After);
-    sealed record Bucket(string Key, string Name, string Type, Bxml.Node Total, int Value);
+    sealed record Bucket(string Key, string Name, string Type, Bxml.Node Total, int Value, string ValueAttr = "value");
     sealed record BucketChange(Bucket Before, int After);
     readonly List<PropertyChange> properties = new();
     readonly List<BucketChange> buckets = new();
@@ -21,6 +23,23 @@ internal sealed class ProfileXpEdit(uint driverXp)
     internal static bool TryDriver(ProfileContainer? container, uint xp, out ProfileXpEdit? edit, out string reason)
     {
         edit = null; reason = "The driver XP totals or linked counters are missing or not safely recognized.";
+        if (Fh3ProfileHelper.IsDecryptedFh3Profile(container))
+        {
+            var fh3Plan = new ProfileXpEdit(xp, isFh3: true);
+            foreach (string path in Fh3DriverPaths)
+            {
+                if (TryProperty(container, path, out _, out ulong old))
+                {
+                    if (old != xp) fh3Plan.properties.Add(new(path, old, xp));
+                }
+                else if (path == "/Main/XP") return false;
+            }
+            uint tierLevelIndex = DriverXpState.CalculateFh3(xp).TierLevelIndex;
+            if (TryProperty(container, "/Main/Level", out _, out ulong oldLevel) && oldLevel != tierLevelIndex)
+                fh3Plan.properties.Add(new("/Main/Level", oldLevel, tierLevelIndex));
+            edit = fh3Plan; reason = ""; return true;
+        }
+
         if (!TryCareerBuckets(container, out var ledger)) return false;
         var plan = new ProfileXpEdit(xp);
         foreach (string path in DriverPaths)
@@ -69,22 +88,38 @@ internal sealed class ProfileXpEdit(uint driverXp)
 #if PROFILE_UNLOCK_TESTING
         ProfileGameData.Copy(container, staged);
         Fh5ProfileGameData.Copy(container, staged);
+        Fh4ProfileGameData.Copy(container, staged);
+        Fh3ProfileGameData.Copy(container, staged);
 #endif
         if (!TryPrepare(staged, out var stagedProperties, out var stagedTotals)) return false;
         for (int i = 0; i < properties.Count; i++)
             if (!stagedProperties[i].TrySetFromText(properties[i].After.ToString(CultureInfo.InvariantCulture))) return false;
         for (int i = 0; i < buckets.Count; i++)
-            if (!staged.SaveState!.SetAttribute(stagedTotals[i], "value", buckets[i].After.ToString(CultureInfo.InvariantCulture))) return false;
+            if (!staged.SaveState!.SetAttribute(stagedTotals[i], buckets[i].Before.ValueAttr, buckets[i].After.ToString(CultureInfo.InvariantCulture))) return false;
         byte[] bytes = staged.Serialize(); var verified = ProfileContainer.Parse(bytes);
-        if (!verified.Serialize().AsSpan().SequenceEqual(bytes) || !TryCareerBuckets(verified, out var ledger)
-            || ledger.Sum(b => (long)b.Value) != driverXp) return false;
-        foreach (string path in DriverPaths)
+        if (!verified.Serialize().AsSpan().SequenceEqual(bytes)) return false;
+        if (!isFh3)
         {
-            if (TryProperty(verified, path, out _, out ulong value))
+            if (!TryCareerBuckets(verified, out var ledger) || ledger.Sum(b => (long)b.Value) != driverXp) return false;
+            foreach (string path in DriverPaths)
             {
-                if (value != driverXp) return false;
+                if (TryProperty(verified, path, out _, out ulong value))
+                {
+                    if (value != driverXp) return false;
+                }
+                else if (path == "/Main/XP") return false;
             }
-            else if (path == "/Main/XP") return false;
+        }
+        else
+        {
+            foreach (string path in Fh3DriverPaths)
+            {
+                if (TryProperty(verified, path, out _, out ulong value))
+                {
+                    if (value != driverXp) return false;
+                }
+                else if (path == "/Main/XP") return false;
+            }
         }
         foreach (var change in properties)
             if (!TryProperty(verified, change.Path, out _, out ulong value) || value != change.After) return false;
@@ -92,7 +127,7 @@ internal sealed class ProfileXpEdit(uint driverXp)
             if (!TryBucket(verified, change.Before.Key, change.Before.Name, change.Before.Type, out var bucket) || bucket!.Value != change.After) return false;
         // Commit only the already-validated leaves. Keep the UI's node identities
         // and every unrelated pending edit, inventory, reward and binary record.
-        for (int i = 0; i < buckets.Count; i++) container.SaveState!.SetAttribute(originalTotals[i], "value", buckets[i].After.ToString(CultureInfo.InvariantCulture));
+        for (int i = 0; i < buckets.Count; i++) container.SaveState!.SetAttribute(originalTotals[i], buckets[i].Before.ValueAttr, buckets[i].After.ToString(CultureInfo.InvariantCulture));
         for (int i = 0; i < properties.Count; i++) { originals[i].RawValue = (byte[])stagedProperties[i].RawValue.Clone(); originals[i].Edited = true; }
         changed = true; reason = ""; return true;
     }
@@ -130,6 +165,27 @@ internal sealed class ProfileXpEdit(uint driverXp)
         buckets = new();
         if (container?.SaveState is not { } bx) return false;
         var keys = new HashSet<string>(StringComparer.Ordinal);
+        if (bx.Strings[bx.Root.NameIndex] == "ObjectDictionary")
+        {
+            foreach (var obj in bx.Root.Children.Where(n => bx.Strings[n.NameIndex] == "Object"))
+            {
+                string key = bx.GetAttribute(obj, "Id") ?? "";
+                if (!key.StartsWith(CareerPrefix, StringComparison.Ordinal))
+                {
+                    bool careerType = string.Equals(bx.GetAttribute(obj, "Type"), "CurrencyBucket", StringComparison.Ordinal) &&
+                        obj.Children.Any(p => bx.Strings[p.NameIndex] == "Property" &&
+                            bx.GetAttribute(p, "Name") == "Type" && bx.GetAttribute(p, "Value") == "CareerXP");
+                    if (careerType) return false;
+                    continue;
+                }
+                if (!keys.Add(key) || keys.Count > 4096) return false;
+                string name = key[CareerPrefix.Length..];
+                if (name.Length is < 1 or > 100 || name.Any(c => !char.IsAsciiLetterOrDigit(c) && c != '_')
+                    || !TryBucket(container, key, name, "CareerXP", out var bucket)) return false;
+                buckets.Add(bucket!);
+            }
+            return buckets.Count > 0 && buckets.Sum(b => (long)b.Value) <= uint.MaxValue;
+        }
         foreach (var map in bx.Root.Children.Where(n => bx.Strings[n.NameIndex] == "map_element"))
         {
             var keyNodes = map.Children.Where(n => bx.Strings[n.NameIndex] == "key").ToArray();
@@ -152,6 +208,25 @@ internal sealed class ProfileXpEdit(uint driverXp)
     {
         bucket = null;
         if (container?.SaveState is not { } bx) return false;
+        if (bx.Strings[bx.Root.NameIndex] == "ObjectDictionary")
+        {
+            var matches = bx.Root.Children.Where(n => bx.Strings[n.NameIndex] == "Object"
+                && string.Equals(bx.GetAttribute(n, "Id"), key, StringComparison.Ordinal)).ToArray();
+            if (matches.Length != 1 || bx.GetAttribute(matches[0], "Type") != "CurrencyBucket") return false;
+            var obj = matches[0];
+            Bxml.Node? Prop(string propName, string propType)
+            {
+                var nodes = obj.Children.Where(n => bx.Strings[n.NameIndex] == "Property" && bx.GetAttribute(n, "Name") == propName).ToArray();
+                return nodes.Length == 1 && bx.GetAttribute(nodes[0], "Type") == propType && nodes[0].Children.Count == 0
+                    && nodes[0].Attributes.Count(a => bx.Strings[a.KeyIndex] == "Value") == 1 ? nodes[0] : null;
+            }
+            if (Prop("Name", "string") is not { } objName || bx.GetAttribute(objName, "Value") != name
+                || Prop("Type", "CurrencyTypes") is not { } objType || bx.GetAttribute(objType, "Value") != type
+                || Prop("Total", "int") is not { } objTotal || !int.TryParse(bx.GetAttribute(objTotal, "Value"), NumberStyles.None, CultureInfo.InvariantCulture, out int objValue) || objValue < 0)
+                return false;
+            bucket = new(key, name, type, objTotal, objValue, "Value");
+            return true;
+        }
         var maps = bx.Root.Children.Where(n => bx.Strings[n.NameIndex] == "map_element"
             && n.Children.Any(c => bx.Strings[c.NameIndex] == "key" && bx.GetAttribute(c, "value") == key)).ToArray();
         if (maps.Length != 1 || maps[0].Children.Count(c => bx.Strings[c.NameIndex] == "key") != 1) return false;

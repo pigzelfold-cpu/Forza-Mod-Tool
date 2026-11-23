@@ -15,15 +15,16 @@ public static partial class PlaylistPointsState
     }
     public sealed record Completion(uint Series, int Activities, int Steps, int Points, int HistoryPointsAdded = 0, int HistoryPoints = 0);
 
-    static PlaylistActivityCatalog.Series SynthesizeSeries(uint seriesId, int totalMaximum, ActivityState activities, State state)
+    static PlaylistActivityCatalog.Series SynthesizeSeries(uint seriesId, int totalMaximum, ActivityState activities, State state, Fh5ProfileGameData.PlaylistSeriesDef? fh5Def = null)
     {
         var saved = activities.Series.SingleOrDefault(s => s.Series == seriesId);
+        bool useDefSeasons = fh5Def != null && fh5Def.SeasonMaxima.Length == 4 && fh5Def.Maximum == totalMaximum;
         int perSeason = totalMaximum / 4;
         int remainder = totalMaximum % 4;
         var seasons = new PlaylistActivityCatalog.Season[4];
         for (uint i = 0; i < 4; i++)
         {
-            int seasonMax = perSeason + (i < remainder ? 1 : 0);
+            int seasonMax = useDefSeasons ? fh5Def!.SeasonMaxima[i] : perSeason + (i < remainder ? 1 : 0);
             var seasonProgress = saved?.Seasons.SingleOrDefault(s => s.Index == i);
             var activityList = new List<PlaylistActivityCatalog.Activity>();
             if (seasonProgress != null)
@@ -41,7 +42,8 @@ public static partial class PlaylistPointsState
                 StoredMaximum = seasonMax
             };
         }
-        return new PlaylistActivityCatalog.Series(seriesId, $"Series {seriesId}", seasons)
+        string name = fh5Def != null && !string.IsNullOrWhiteSpace(fh5Def.Name) ? fh5Def.Name : "Playlist";
+        return new PlaylistActivityCatalog.Series(seriesId, name, seasons)
         {
             StoredMaximum = totalMaximum
         };
@@ -54,17 +56,30 @@ public static partial class PlaylistPointsState
         if (!TryActivities(record.Payload, state!, out var activities))
         { reason = "Playlist activity layout is not recognized; saved progress stays unchanged."; return false; }
         var definitions = ProfileGameData.For(container)?.Playlists ?? Array.Empty<PlaylistActivityCatalog.Series>();
-        playlists = definitions.Select(d => d.Id).Concat(activities!.Maxima.Keys).Concat(state!.Series.Keys).Where(id => id != 0).Distinct()
+        var fh5Defs = state!.Version == 8 ? Fh5ProfileGameData.For(container)?.PlaylistsById : null;
+        IEnumerable<uint> seriesIds = state.Version == 8
+            ? state.RewardSeries.Concat(activities!.Maxima.Keys).Concat(state.Series.Keys)
+            : definitions.Select(d => d.Id).Concat(activities!.Maxima.Keys).Concat(state.Series.Keys);
+        playlists = seriesIds.Where(id => id != 0).Distinct()
             .OrderDescending().Select(id =>
             {
-                var definition = definitions.SingleOrDefault(d => d.Id == id);
-                if (state.Version == 8 && definition == null && activities.Maxima.TryGetValue(id, out var v8Max))
+                PlaylistActivityCatalog.Series? definition = null;
+                Fh5ProfileGameData.PlaylistSeriesDef? fh5Def = null;
+                if (state.Version == 8)
                 {
-                    definition = SynthesizeSeries(id, v8Max.Maximum, activities, state);
+                    fh5Def = fh5Defs?.GetValueOrDefault(id);
+                    if (activities!.Maxima.TryGetValue(id, out var v8Max))
+                        definition = SynthesizeSeries(id, v8Max.Maximum, activities, state, fh5Def);
+                    else if (fh5Def != null && fh5Def.Maximum > 0)
+                        definition = SynthesizeSeries(id, fh5Def.Maximum, activities, state, fh5Def);
+                }
+                else
+                {
+                    definition = definitions.SingleOrDefault(d => d.Id == id);
                 }
                 bool supported = CanComplete(state, activities!, definition, id, out string error);
                 int maximum = activities!.Maxima.TryGetValue(id, out var max) ? max.Maximum : definition?.Maximum ?? 0;
-                return new Playlist(id, definition?.Name ?? "Playlist", state.Series.GetValueOrDefault(id)?.Value ?? 0, maximum, supported, error)
+                return new Playlist(id, definition?.Name ?? fh5Def?.Name ?? "Playlist", state.Series.GetValueOrDefault(id)?.Value ?? 0, maximum, supported, error)
                 {
                     NeedsInitialization = !state.Series.ContainsKey(id) || state.Seasons.Keys.Count(k => k.Series == id) != 4 ||
                         activities.Series.SingleOrDefault(s => s.Series == id)?.Seasons.Count != 4,
@@ -82,12 +97,22 @@ public static partial class PlaylistPointsState
         if (!TryRecord(container, out var original) || !TryParse(original!.Payload, out var state, out reason)) return false;
         if (!TryActivities(original.Payload, state!, out var activityState))
         { reason = "Playlist activity layout is not recognized; nothing was changed."; return false; }
-        var definition = ProfileGameData.For(container)?.Playlists.SingleOrDefault(d => d.Id == series);
-        if (state!.Version == 8 && definition == null && activityState!.Maxima.TryGetValue(series, out var v8Max))
+        PlaylistActivityCatalog.Series? definition;
+        if (state!.Version == 8)
         {
-            definition = SynthesizeSeries(series, v8Max.Maximum, activityState, state);
+            var fh5Def = Fh5ProfileGameData.For(container)?.PlaylistsById.GetValueOrDefault(series);
+            if (activityState!.Maxima.TryGetValue(series, out var v8Max))
+                definition = SynthesizeSeries(series, v8Max.Maximum, activityState, state, fh5Def);
+            else if (fh5Def != null && fh5Def.Maximum > 0)
+                definition = SynthesizeSeries(series, fh5Def.Maximum, activityState, state, fh5Def);
+            else
+                definition = null;
         }
-        if (!CanComplete(state!, activityState!, definition, series, out reason)) return false;
+        else
+        {
+            definition = ProfileGameData.For(container)?.Playlists.SingleOrDefault(d => d.Id == series);
+        }
+        if (!CanComplete(state, activityState!, definition, series, out reason)) return false;
         int oldHistory = 0;
         Bxml.Node? historyNode = null;
         if (state.Version != 8)
@@ -131,7 +156,8 @@ public static partial class PlaylistPointsState
         TrackSeries nextTracks;
         if (state.Version == 8 && activityState.Maxima.TryGetValue(series, out var v8Tracks))
         {
-            nextTracks = new TrackSeries(series, v8Tracks.Tracks.Select(t => new Track(t.Key, t.Value)).ToList());
+            var nonZero = v8Tracks.TrackList.Where(t => t.Value > 0).Select(t => new Track(t.Key, t.Value)).ToList();
+            nextTracks = new TrackSeries(series, nonZero.Count > 0 ? nonZero : new() { new(state.BaseTrack, definition.Maximum) });
         }
         else
         {
@@ -141,13 +167,25 @@ public static partial class PlaylistPointsState
         using var stream = new MemoryStream();
         using (var w = new BinaryWriter(stream, System.Text.Encoding.UTF8, true))
         {
-            WriteCompletionScores(w, original.Payload, state, definition);
-            // Cached maxima and their native version tokens remain byte-exact.
-            w.Write(original.Payload.AsSpan(state.ContentOffset, activityState.Start - state.ContentOffset));
+            WriteScoreMaps(w, original.Payload, state, definition.Id, definition.Maximum,
+                definition.Seasons.Select(s => (s.Index, s.Maximum)).ToArray());
+            if (state.Version != 8 || activityState.Maxima.ContainsKey(series))
+            {
+                // Cached maxima and their native version tokens remain byte-exact.
+                w.Write(original.Payload.AsSpan(state.ContentOffset, activityState.Start - state.ContentOffset));
+            }
+            else
+            {
+                ulong token = activityState.MaximaEntries.LastOrDefault()?.Token ?? 0UL;
+                var nextMaxima = activityState.MaximaEntries.ToList();
+                nextMaxima.Add(new MaximumEntry(series, token, definition.Maximum,
+                    new() { new(state.BaseTrack, definition.Maximum) },
+                    new() { [state.BaseTrack] = definition.Maximum }));
+                WriteMaxima(w, nextMaxima);
+            }
             WriteActivities(w, activityState.Series, state.Version);
             w.Write(original.Payload.AsSpan(activityState.End, state.Tail.Offset - activityState.End));
-            w.Write((uint)tracks.Count);
-            foreach (var item in tracks) { w.Write(item.Id); w.Write((uint)item.Tracks.Count); foreach (var track in item.Tracks) { w.Write(track.Id); w.Write(track.Points); } }
+            WriteTrackSeries(w, tracks);
             if (state.Version != 8)
             {
                 WriteCompletionMetadata(w, state.Tail, series, (int)lifetime);
@@ -167,6 +205,7 @@ public static partial class PlaylistPointsState
             }
         var staged = ProfileContainer.Parse(container!.Serialize());
         ProfileGameData.Copy(container, staged);
+        Fh5ProfileGameData.Copy(container, staged);
         staged.Career!.ReplacePayload(staged.Career.Records.Single(r => r.Name == Name), edited);
         if (state.Version != 8 && history != oldHistory)
         {
@@ -210,21 +249,32 @@ public static partial class PlaylistPointsState
 
     static bool CanComplete(State state, ActivityState activities, PlaylistActivityCatalog.Series? definition, uint series, out string reason)
     {
-        reason = "Select the matching ObjectModelGame.zip to load Playlist challenges.";
+        reason = state.Version == 8
+            ? "Select FH5 TIDETables.zip to load historical Playlist totals, or edit individual season points below."
+            : "Select the matching ObjectModelGame.zip to load Playlist challenges.";
         if (definition == null) return false;
         reason = "Playlist definitions are incomplete; nothing was changed.";
-        if (series == 0 || definition.Id != series || definition.Seasons.Length != 4 ||
+        if (series == 0 || definition.Id != series || definition.Seasons.Length != 4 || definition.Maximum <= 0 ||
             !definition.Seasons.Select(s => s.Index).Order().SequenceEqual(new uint[] { 0, 1, 2, 3 })) return false;
-        reason = "Open Festival Playlist in the updated game, let it save, then reload this save to initialize the new Series.";
-        if (!activities.Maxima.TryGetValue(series, out var maximum)) return false;
-        reason = "Playlist definitions and saved maximum points do not match. Nothing was changed.";
-        if (maximum.Maximum != definition.Maximum) return false;
         if (state.Version == 8)
         {
-            if (maximum.Tracks.Values.Sum() != definition.Maximum) return false;
+            if (activities.Maxima.TryGetValue(series, out var v8Max))
+            {
+                reason = "Playlist definitions and saved maximum points do not match. Nothing was changed.";
+                if (v8Max.Maximum != definition.Maximum || v8Max.Tracks.Values.Sum() != definition.Maximum) return false;
+            }
+            else if (!state.RewardSeries.Contains(series))
+            {
+                reason = "Playlist definitions are not recognized for this save.";
+                return false;
+            }
         }
         else
         {
+            reason = "Open Festival Playlist in the updated game, let it save, then reload this save to initialize the new Series.";
+            if (!activities.Maxima.TryGetValue(series, out var maximum)) return false;
+            reason = "Playlist definitions and saved maximum points do not match. Nothing was changed.";
+            if (maximum.Maximum != definition.Maximum) return false;
             if (maximum.Tracks.GetValueOrDefault(state.BaseTrack) != definition.Maximum ||
                 maximum.Tracks.Any(t => t.Key != state.BaseTrack && t.Value != 0)) return false;
         }
@@ -250,34 +300,6 @@ public static partial class PlaylistPointsState
             }
         }
         reason = ""; return true;
-    }
-
-    static void WriteCompletionScores(BinaryWriter w, byte[] original, State state, PlaylistActivityCatalog.Series definition)
-    {
-        // Keep the version and both reward-claim maps exactly as loaded.
-        w.Write(original.AsSpan(0, state.ScoreMapsOffset));
-        var scores = state.Series.ToDictionary(p => p.Key, p => p.Value.Value);
-        scores[definition.Id] = definition.Maximum;
-        w.Write((uint)scores.Count);
-        foreach (var item in scores) { w.Write(item.Key); w.Write(item.Value); }
-        var roots = state.SeasonRoots.ToList();
-        if (!roots.Contains(definition.Id)) roots.Add(definition.Id);
-        w.Write((uint)roots.Count);
-        foreach (uint id in roots)
-        {
-            w.Write(id);
-            if (id == definition.Id)
-            {
-                w.Write((uint)definition.Seasons.Length);
-                foreach (var season in definition.Seasons) { w.Write(season.Index); w.Write(season.Maximum); }
-            }
-            else
-            {
-                var seasons = state.Seasons.Where(p => p.Key.Series == id).ToArray();
-                w.Write((uint)seasons.Length);
-                foreach (var season in seasons) { w.Write(season.Key.Season); w.Write(season.Value.Value); }
-            }
-        }
     }
 
     static void WriteCompletionMetadata(BinaryWriter w, Tail tail, uint series, int lifetime)

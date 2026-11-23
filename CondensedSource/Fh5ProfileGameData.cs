@@ -22,12 +22,21 @@ public static class Fh5ProfileGameData
     public sealed record BadgeItem(uint Id, uint BadgeDefId, uint ChallengeDataId, string Name, string Description, uint[] ObjectiveIds, ChallengeObjectiveDef[] Objectives);
     public sealed record AccoladeCollectionDef(uint Id, string Name, string Description, uint SortOrder, uint[] ChallengeIds);
     public sealed record AccoladeItem(uint Id, uint ChallengeDataId, uint CollectionId, string CollectionName, string SubcategoryName, string Category, string Name, string Description, string HowToUnlock, int Points, uint[] ObjectiveIds, ChallengeObjectiveDef[] Objectives);
+    public sealed record PlaylistSeriesDef(uint Id, string Name, int[] SeasonMaxima)
+    {
+        public int Maximum => SeasonMaxima.Sum();
+    }
+    public sealed record HotWheelsRankDef(uint Id, string Rank, string DisplayName, string MaxCarClass, int MedalTarget, uint CompleteQualifierMission);
+    public sealed record HotWheelsMissionItem(uint Id, uint ChallengeDataId, string Rank, string RankDisplay, string Importance, uint SortOrder, string Name, string Description, int Medals, uint[] ObjectiveIds, ChallengeObjectiveDef[] Objectives);
+    public sealed record RallyChallengeItem(uint Id, uint ChallengeDataId, string TeamBucket, string TeamName, int StageIndex, string Name, string Description, int Reputation, uint[] ObjectiveIds, ChallengeObjectiveDef[] Objectives);
 
     internal sealed record Snapshot(
         string Path,
         string Fingerprint,
         uint[] OnlineThresholds,
         int ValidRoadBits,
+        int Ex1ValidRoadBits,
+        int Ex2ValidRoadBits,
         uint RoadTargetCount,
         ClothingItem[] Clothing,
         HornItem[] Horns,
@@ -35,7 +44,11 @@ public static class Fh5ProfileGameData
         PhraseItem[] Phrases,
         BadgeItem[] Badges,
         AccoladeCollectionDef[] Collections,
-        AccoladeItem[] Accolades)
+        AccoladeItem[] Accolades,
+        PlaylistSeriesDef[] Playlists,
+        HotWheelsRankDef[] HotWheelsRanks,
+        HotWheelsMissionItem[] HotWheelsMissions,
+        RallyChallengeItem[] RallyChallenges)
     {
         internal IReadOnlyDictionary<uint, ChallengeObjectiveDef> ObjectivesById { get; init; } = new Dictionary<uint, ChallengeObjectiveDef>();
         internal IReadOnlyDictionary<uint, BadgeItem> BadgesById { get; } = Badges.ToDictionary(b => b.Id);
@@ -45,6 +58,9 @@ public static class Fh5ProfileGameData
         internal IReadOnlyDictionary<uint, HornItem> HornsById { get; } = Horns.ToDictionary(h => h.Id);
         internal IReadOnlyDictionary<uint, EmoteItem> EmotesById { get; } = Emotes.ToDictionary(e => e.Id);
         internal IReadOnlyDictionary<uint, PhraseItem> PhrasesById { get; } = Phrases.ToDictionary(p => p.Id);
+        internal IReadOnlyDictionary<uint, PlaylistSeriesDef> PlaylistsById { get; } = Playlists.ToDictionary(p => p.Id);
+        internal IReadOnlyDictionary<uint, HotWheelsMissionItem> HotWheelsMissionsById { get; } = HotWheelsMissions.ToDictionary(m => m.Id);
+        internal IReadOnlyDictionary<uint, RallyChallengeItem> RallyChallengesById { get; } = RallyChallenges.ToDictionary(c => c.Id);
     }
 
     public sealed record Status(bool Loaded, string Source, string Message);
@@ -52,6 +68,8 @@ public static class Fh5ProfileGameData
     // Exact 17-segment RLE table of FH5 HorizonOpenXP.xml (1,000 ranks: Rank 1 = 0 .. Rank 1000 = 10,000,000).
     internal static readonly uint[] OnlineFallbackThresholds = BuildOnlineFallbackThresholds();
     internal const int DefaultValidRoadBits = 24_498;
+    internal const int DefaultEx1ValidRoadBits = 10_877;
+    internal const int DefaultEx2ValidRoadBits = 3_171;
     internal const uint DefaultRoadTargetCount = 578;
 
     static readonly string[] WantedTables =
@@ -74,6 +92,11 @@ public static class Fh5ProfileGameData
         "ChallengeStatsBucket.xml",
         "Reward.xml",
         "CurrencyReward.xml",
+        "SeasonScheduleOrder.xml",
+        "FestivalPassSchedule.xml",
+        "FestivalPassEventInfo.xml",
+        "SpectrumMissionChallengeData.xml",
+        "SpectrumRankData.xml",
     };
 
     static readonly HashSet<string> WardrobeSlots = new(StringComparer.Ordinal)
@@ -114,9 +137,9 @@ public static class Fh5ProfileGameData
 
     public static Status GetStatus(ProfileContainer? container) => For(container) is { } data
         ? new(true, data.Path,
-            $"Installed FH5 game data: {data.Clothing.Length} clothes · {data.Horns.Length} horns · {data.Emotes.Length} emotes · {data.Phrases.Length} phrases · {data.Badges.Length} badges · {data.Accolades.Length:n0} Accolades.")
+            $"Installed FH5 game data: {data.Clothing.Length} clothes · {data.Horns.Length} horns · {data.Emotes.Length} emotes · {data.Phrases.Length} phrases · {data.Badges.Length} badges · {data.Accolades.Length:n0} Accolades · {data.HotWheelsMissions.Length} Hot Wheels · {data.RallyChallenges.Length} Rally.")
         : new(false, "Built-in fallback",
-            "Select FH5 TIDETables.zip (or mediapc\\stripped\\TIDETables) for unlock & Accolade names/editing. Built-in XP tables remain active.");
+            "Select FH5 TIDETables.zip (or mediapc\\stripped\\TIDETables) for unlock, Accolade & expansion editing. Built-in XP tables remain active.");
 
     public static Status AttachAutomatically(ProfileContainer container)
     {
@@ -298,7 +321,9 @@ public static class Fh5ProfileGameData
 
         string? gameRoot = FindGameRoot(tideSource);
         var strings = LoadEnglishStrings(tideSource, gameRoot);
-        int validRoadBits = ReadValidRoadBits(gameRoot);
+        int validRoadBits = ReadNavBitCount(gameRoot, Path.Combine("media", "Tracks", "Hendrix", "Ribbon_00", "Hendrix_00.nav"), DefaultValidRoadBits);
+        int ex1RoadBits = ReadNavBitCount(gameRoot, Path.Combine("DLC", "MicrosoftExpansion1FH5", "media", "Tracks", "Rainbow", "Ribbon_00", "rainbow_00.nav"), DefaultEx1ValidRoadBits);
+        int ex2RoadBits = ReadNavBitCount(gameRoot, Path.Combine("DLC", "MicrosoftExpansion2FH5", "media", "Tracks", "Falcon", "Ribbon_00", "falcon_00.nav"), DefaultEx2ValidRoadBits);
 
         uint[] onlineThresholds = LoadXml("HorizonOpenXP.xml").Elements("row")
             .OrderBy(r => IntAttr(r, "id"))
@@ -427,20 +452,20 @@ public static class Fh5ProfileGameData
                 collectionByChallengeId.TryAdd(cid, def);
         }
 
-        int SumCareerProgressPoints(string instantRewardsAttr)
+        int SumCurrencyAmount(string instantRewardsAttr, string bucketId, string currencyType)
         {
-            int pts = 0;
+            int amt = 0;
             foreach (uint rid in SplitUInts(instantRewardsAttr))
             {
                 if (!rewardMap.TryGetValue(rid, out var r)) continue;
                 if (!StrAttr(r, "RewardType").Equals("Currency", StringComparison.Ordinal)) continue;
                 if (!uint.TryParse(StrAttr(r, "RewardID"), NumberStyles.None, CultureInfo.InvariantCulture, out uint curId)) continue;
                 if (!currencyRewardMap.TryGetValue(curId, out var cr)) continue;
-                if (StrAttr(cr, "BucketId").Equals("career_progress", StringComparison.Ordinal) &&
-                    StrAttr(cr, "CurrencyType").Equals("CareerProgress", StringComparison.Ordinal))
-                    pts += IntAttr(cr, "Amount");
+                if (StrAttr(cr, "BucketId").Equals(bucketId, StringComparison.Ordinal) &&
+                    StrAttr(cr, "CurrencyType").Equals(currencyType, StringComparison.Ordinal))
+                    amt += IntAttr(cr, "Amount");
             }
-            return pts;
+            return amt;
         }
 
         var accolades = new List<AccoladeItem>();
@@ -457,16 +482,86 @@ public static class Fh5ProfileGameData
             string name = ResolveString(strings, StrAttr(ch, "Name"), "Accolade #" + id.ToString(CultureInfo.InvariantCulture));
             string desc = ResolveString(strings, StrAttr(ch, "Description"), "");
             string howTo = ResolveString(strings, StrAttr(row, "HowToUnlock"), "");
-            int points = SumCareerProgressPoints(StrAttr(ch, "InstantRewards"));
+            int points = SumCurrencyAmount(StrAttr(ch, "InstantRewards"), "career_progress", "CareerProgress");
             var objs = ResolveObjectives(ch, out uint[] objIds);
             accolades.Add(new(id, chId, col.Id, col.Name, subName, cat, name, desc, howTo, points, objIds, objs));
         }
+
+        // Hot Wheels Academy Ranks & Missions
+        var hotWheelsRanks = rawTables.ContainsKey("SpectrumRankData.xml")
+            ? LoadXml("SpectrumRankData.xml").Elements("row")
+                .OrderBy(r => UIntAttr(r, "id"))
+                .Select(r =>
+                {
+                    string rk = StrAttr(r, "Rank");
+                    return new HotWheelsRankDef(
+                        UIntAttr(r, "id"),
+                        rk,
+                        HotWheelsRankDisplay(rk),
+                        StrAttr(r, "MaxCarClass"),
+                        IntAttr(r, "MedalTarget"),
+                        TryUIntAttr(r, "CompleteQualifierMission"));
+                })
+                .ToArray()
+            : Array.Empty<HotWheelsRankDef>();
+
+        var hotWheelsMissions = new List<HotWheelsMissionItem>();
+        if (rawTables.ContainsKey("SpectrumMissionChallengeData.xml"))
+        {
+            foreach (var row in LoadXml("SpectrumMissionChallengeData.xml").Elements("row"))
+            {
+                uint id = UIntAttr(row, "id");
+                uint chId = UIntAttr(row, "ChallengeData");
+                if (!challengeMap.TryGetValue(chId, out var ch)) continue;
+                string rank = StrAttr(row, "AssociatedRank");
+                string imp = StrAttr(row, "ImportanceType");
+                uint sort = TryUIntAttr(row, "SortOrder");
+                string name = CleanPlaylistName(ResolveString(strings, StrAttr(ch, "Name"), "Mission #" + id.ToString(CultureInfo.InvariantCulture)));
+                string desc = CleanPlaylistName(ResolveString(strings, StrAttr(ch, "Description"), ""));
+                int medals = SumCurrencyAmount(StrAttr(ch, "InstantRewards"), "career_progress", "SpectrumMedals");
+                var objs = ResolveObjectives(ch, out uint[] objIds);
+                hotWheelsMissions.Add(new(id, chId, rank, HotWheelsRankDisplay(rank), imp, sort, name, desc, medals, objIds, objs));
+            }
+        }
+
+        // Rally Adventure (Sierra Nueva) Team Challenges
+        var rallyStageMap = ReadRallyStageMap(gameRoot);
+        var rallyChallenges = new List<RallyChallengeItem>();
+        foreach (var ch in LoadXml("ChallengeData.xml").Elements("row"))
+        {
+            uint id = UIntAttr(ch, "id");
+            if (rallyStageMap.Count > 0 && !rallyStageMap.ContainsKey(id)) continue;
+            int rep = 0;
+            string teamBucket = "";
+            foreach (uint rid in SplitUInts(StrAttr(ch, "InstantRewards")))
+            {
+                if (!rewardMap.TryGetValue(rid, out var r)) continue;
+                if (!StrAttr(r, "RewardType").Equals("Currency", StringComparison.Ordinal)) continue;
+                if (!uint.TryParse(StrAttr(r, "RewardID"), NumberStyles.None, CultureInfo.InvariantCulture, out uint curId)) continue;
+                if (!currencyRewardMap.TryGetValue(curId, out var cr)) continue;
+                if (StrAttr(cr, "CurrencyType").Equals("AstraReputation", StringComparison.Ordinal))
+                {
+                    teamBucket = StrAttr(cr, "BucketId");
+                    rep += IntAttr(cr, "Amount");
+                }
+            }
+            if (rep <= 0 || string.IsNullOrEmpty(teamBucket)) continue;
+            string name = CleanPlaylistName(ResolveString(strings, StrAttr(ch, "Name"), "Rally #" + id.ToString(CultureInfo.InvariantCulture)));
+            string desc = CleanPlaylistName(ResolveString(strings, StrAttr(ch, "Description"), ""));
+            int stageIdx = rallyStageMap.TryGetValue(id, out int st) ? st : -1;
+            var objs = ResolveObjectives(ch, out uint[] objIds);
+            rallyChallenges.Add(new(id, id, teamBucket, RallyTeamDisplayName(teamBucket), stageIdx, name, desc, rep, objIds, objs));
+        }
+
+        var playlists = ReadPlaylists(rawTables, strings);
 
         return new(
             tideSource,
             fingerprint,
             onlineThresholds,
             validRoadBits,
+            ex1RoadBits,
+            ex2RoadBits,
             DefaultRoadTargetCount,
             clothing.OrderBy(c => c.Category, StringComparer.Ordinal).ThenBy(c => c.Name, StringComparer.OrdinalIgnoreCase).ThenBy(c => c.Id).ToArray(),
             horns.OrderBy(h => h.Id).ToArray(),
@@ -474,11 +569,119 @@ public static class Fh5ProfileGameData
             phrases.OrderBy(p => p.Category, StringComparer.OrdinalIgnoreCase).ThenBy(p => p.Name, StringComparer.OrdinalIgnoreCase).ThenBy(p => p.Id).ToArray(),
             badges.OrderBy(b => b.Id).ToArray(),
             collections.OrderBy(c => c.SortOrder).ThenBy(c => c.Id).ToArray(),
-            accolades.OrderBy(a => a.CollectionId).ThenBy(a => a.Id).ToArray())
+            accolades.OrderBy(a => a.CollectionId).ThenBy(a => a.Id).ToArray(),
+            playlists,
+            hotWheelsRanks,
+            hotWheelsMissions.OrderBy(m => m.SortOrder).ThenBy(m => m.Id).ToArray(),
+            rallyChallenges.OrderBy(r => r.TeamName, StringComparer.Ordinal).ThenBy(r => r.StageIndex < 0 ? int.MaxValue : r.StageIndex).ThenBy(r => r.Id).ToArray())
         {
             ObjectivesById = objectiveDefs,
         };
     }
+
+    static PlaylistSeriesDef[] ReadPlaylists(Dictionary<string, byte[]> rawTables, Dictionary<string, string> strings)
+    {
+        if (!rawTables.TryGetValue("SeasonScheduleOrder.xml", out byte[]? orderBytes) ||
+            !rawTables.TryGetValue("FestivalPassSchedule.xml", out byte[]? scheduleBytes) ||
+            !rawTables.TryGetValue("FestivalPassEventInfo.xml", out byte[]? eventInfoBytes))
+            return Array.Empty<PlaylistSeriesDef>();
+
+        static XElement? ParseRoot(byte[] data) => XDocument.Parse(Bxml.Parse(data).ToXml()).Root;
+        var orderRoot = ParseRoot(orderBytes);
+        var scheduleRoot = ParseRoot(scheduleBytes);
+        var eventInfoRoot = ParseRoot(eventInfoBytes);
+        if (orderRoot == null || scheduleRoot == null || eventInfoRoot == null)
+            return Array.Empty<PlaylistSeriesDef>();
+
+        var schedules = scheduleRoot.Elements("row")
+            .Where(r => uint.TryParse(StrAttr(r, "id"), NumberStyles.None, CultureInfo.InvariantCulture, out _))
+            .ToDictionary(r => UIntAttr(r, "id"));
+
+        var eventTypesByInstance = new Dictionary<uint, List<string>>();
+        foreach (var row in eventInfoRoot.Elements("row"))
+        {
+            if (!uint.TryParse(StrAttr(row, "LocalSeasonInstance"), NumberStyles.None, CultureInfo.InvariantCulture, out uint inst))
+                continue;
+            string eventType = StrAttr(row, "EventType");
+            if (string.IsNullOrEmpty(eventType)) continue;
+            if (!eventTypesByInstance.TryGetValue(inst, out var list))
+            {
+                list = new List<string>();
+                eventTypesByInstance[inst] = list;
+            }
+            list.Add(eventType);
+        }
+
+        var result = new List<PlaylistSeriesDef>();
+        foreach (var group in orderRoot.Elements("row")
+            .Select(r => (Row: r, HasSeries: uint.TryParse(StrAttr(r, "Series"), NumberStyles.None, CultureInfo.InvariantCulture, out uint s), Series: TryUIntAttr(r, "Series")))
+            .Where(x => x.HasSeries && x.Series > 0)
+            .GroupBy(x => x.Series))
+        {
+            uint seriesId = group.Key;
+            var rows = group.Select(x => x.Row).OrderBy(r => TryUIntAttr(r, "id")).ToArray();
+            if (rows.Length != 4) continue;
+
+            string rawName = "Series " + seriesId.ToString(CultureInfo.InvariantCulture);
+            if (uint.TryParse(StrAttr(rows[0], "FestivalPassScheduleRowId"), NumberStyles.None, CultureInfo.InvariantCulture, out uint fpRowId) &&
+                schedules.TryGetValue(fpRowId, out var schedRow))
+            {
+                string histKey = StrAttr(schedRow, "SeriesHistoryName");
+                string seriesKey = StrAttr(schedRow, "SeriesName");
+                string resolved = ResolveString(strings, seriesKey, ResolveString(strings, histKey, rawName));
+                rawName = CleanPlaylistName(resolved);
+                if (string.IsNullOrWhiteSpace(rawName))
+                    rawName = "Series " + seriesId.ToString(CultureInfo.InvariantCulture);
+            }
+
+            var seasonMaxima = new int[4];
+            for (int i = 0; i < 4; i++)
+            {
+                uint inst = TryUIntAttr(rows[i], "SeasonInstanceRef");
+                if (eventTypesByInstance.TryGetValue(inst, out var types))
+                {
+                    int sum = 0;
+                    foreach (string et in types)
+                        sum += PlaylistEventPoints(seriesId, et);
+                    seasonMaxima[i] = sum;
+                }
+            }
+            result.Add(new(seriesId, rawName, seasonMaxima));
+        }
+
+        return result.OrderBy(p => p.Id).ToArray();
+    }
+
+    static string CleanPlaylistName(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return "";
+        string stripped = Regex.Replace(text, @"\[HIGHLIGHT:([^\]]*)\]", "$1");
+        stripped = stripped.Replace('\r', ' ').Replace('\n', ' ');
+        return Regex.Replace(stripped, @"\s+", " ").Trim();
+    }
+
+    static int PlaylistEventPoints(uint series, string eventType) => eventType switch
+    {
+        "SeasonalEvent" => 5,
+        "Trial" => 10,
+        "PRStunt" => 2,
+        "PGGamesSeasonal" => 3,
+        "ForzathonDaily" => 7,
+        "ForzathonWeekly" => 5,
+        "MonthlyRival" => series >= 7 ? 1 : 4,
+        "HorizonStory" => 3,
+        "ShowcaseRemix" => 5,
+        "PhotoChallenge" => 2,
+        "TreasureChest" => 3,
+        "HorizonTour" => series >= 25 ? 8 : 3,
+        "HorizonOpen" => 2,
+        "Collectibles" => 3,
+        "Eliminator" => 2,
+        "StuntParty" => 3,
+        "EventLabEvent" => 3,
+        "HideSeek" => series >= 38 ? 2 : 0,
+        _ => 0,
+    };
 
     static Dictionary<string, string> LoadEnglishStrings(string tideSource, string? gameRoot)
     {
@@ -527,23 +730,76 @@ public static class Fh5ProfileGameData
             target[tableName + "." + pair.Key] = pair.Value;
     }
 
-    static int ReadValidRoadBits(string? gameRoot)
+    static int ReadNavBitCount(string? gameRoot, string relativePath, int fallback)
     {
-        if (gameRoot == null) return DefaultValidRoadBits;
-        string nav = Path.Combine(gameRoot, "media", "Tracks", "Hendrix", "Ribbon_00", "Hendrix_00.nav");
-        if (!File.Exists(nav)) return DefaultValidRoadBits;
+        if (gameRoot == null) return fallback;
+        string nav = Path.Combine(gameRoot, relativePath);
+        if (!File.Exists(nav)) return fallback;
         try
         {
             using var fs = File.OpenRead(nav);
-            if (fs.Length < 0x60) return DefaultValidRoadBits;
+            if (fs.Length < 0x60) return fallback;
             Span<byte> hdr = stackalloc byte[0x60];
             fs.ReadExactly(hdr);
             // "WVNA" = 0x4E415657 LE
-            if (BinaryPrimitives.ReadUInt32LittleEndian(hdr) != 0x4E415657u) return DefaultValidRoadBits;
+            if (BinaryPrimitives.ReadUInt32LittleEndian(hdr) != 0x4E415657u) return fallback;
             int bits = BinaryPrimitives.ReadInt32LittleEndian(hdr.Slice(0x58, 4));
-            return bits is >= 1000 and <= 32768 ? bits : DefaultValidRoadBits;
+            return bits is >= 500 and <= 32768 ? bits : fallback;
         }
-        catch (IOException) { return DefaultValidRoadBits; }
+        catch (IOException) { return fallback; }
+    }
+
+    static string HotWheelsRankDisplay(string rank) => rank switch
+    {
+        "Unranked" => "Unranked (Qualifier)",
+        "Rookie" => "Rookie (B Class)",
+        "Pro" => "Pro (A Class)",
+        "Expert" => "Expert (S1 Class)",
+        "Elite" => "Elite (S2 Class)",
+        "SkydriverLegend" => "Legend (X Class)",
+        _ => rank,
+    };
+
+    static string RallyTeamDisplayName(string bucketId) => bucketId switch
+    {
+        "team_alejandra_reputation" => "Apex Predators (Alejandra)",
+        "team_alex_reputation" => "Horizon Raptors (Alex)",
+        "team_rami_reputation" => "Grit Reapers (Rami)",
+        _ => Humanize(bucketId),
+    };
+
+    static Dictionary<uint, int> ReadRallyStageMap(string? gameRoot)
+    {
+        var map = new Dictionary<uint, int>();
+        if (gameRoot == null) return map;
+        string cmsZip = Path.Combine(gameRoot, "media", "CMS.zip");
+        if (!File.Exists(cmsZip) || !Fh5ZipArchive.CanHandle(cmsZip)) return map;
+        try
+        {
+            var wanted = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "7ff5909c-0683-4443-a026-bf4826153901-en-GB.om.xml",
+                "7ff5909c-0683-4443-a026-bf4826153901-DEV.om.xml",
+            };
+            var files = Fh5ZipArchive.ReadEntries(cmsZip, wanted);
+            byte[]? raw = files.GetValueOrDefault("7ff5909c-0683-4443-a026-bf4826153901-en-GB.om.xml")
+                ?? files.GetValueOrDefault("7ff5909c-0683-4443-a026-bf4826153901-DEV.om.xml");
+            if (raw == null) return map;
+            var doc = XDocument.Parse(Encoding.UTF8.GetString(raw));
+            foreach (var stageEl in doc.Descendants("property").Where(p => StrAttr(p, "id") == "Stages").SelectMany(p => p.Elements("element")))
+            {
+                var idxProp = stageEl.Elements("property").FirstOrDefault(p => StrAttr(p, "id") == "Index");
+                if (idxProp == null || !int.TryParse(StrAttr(idxProp, "value"), NumberStyles.Integer, CultureInfo.InvariantCulture, out int stageIdx))
+                    continue;
+                foreach (var chProp in stageEl.Descendants("property").Where(p => StrAttr(p, "id") == "ChallengeDataRow"))
+                {
+                    if (uint.TryParse(StrAttr(chProp, "value"), NumberStyles.None, CultureInfo.InvariantCulture, out uint chId))
+                        map[chId] = stageIdx;
+                }
+            }
+        }
+        catch { }
+        return map;
     }
 
     static Dictionary<uint, XElement> IndexByIdWithAliases(XElement root)

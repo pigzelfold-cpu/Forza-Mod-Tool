@@ -29,7 +29,7 @@ public static class Fh5ZipArchive
     public sealed record Progress(int Completed, int EntryCount, long OutputBytes, string EntryName);
     public sealed record ArchiveInfo(int EntryCount, int EncryptedEntries, long PlaintextBytes, string OriginalName);
     public sealed record ExtractResult(int EntryCount, int EncryptedEntries, long OutputBytes, string OutputDirectory);
-    public sealed record RepackResult(int EntryCount, int ChangedEntries, string OriginalName, string OutputPath);
+    public sealed record RepackResult(int EntryCount, int ChangedEntries, string OriginalName, string OutputPath, int UpdatedCmsManifests = 0, int UpdatedCmsEntries = 0);
 
     public static bool IsWorkspace(string path) => Directory.Exists(path)
         ? File.Exists(Path.Combine(path, ManifestName))
@@ -122,7 +122,7 @@ public static class Fh5ZipArchive
 
     public static string OriginalName(string workspace) => ReadManifest(WorkspaceRoot(workspace)).OriginalName;
 
-    public static RepackResult Repack(string workspace, string outputPath, IProgress<Progress>? progress = null)
+    public static RepackResult Repack(string workspace, string outputPath, IProgress<Progress>? progress = null, bool syncCmsManifest = true)
     {
         string root = WorkspaceRoot(workspace); var manifest = ReadManifest(root);
         string destination = Path.GetFullPath(outputPath);
@@ -133,6 +133,7 @@ public static class Fh5ZipArchive
         if (!Convert.ToHexString(SHA256.HashData(source)).Equals(manifest.TemplateSha256, StringComparison.Ordinal))
             throw new InvalidDataException("ZIP workspace template fingerprint changed.");
         var archive = Parse(source); CheckWorkspace(root, archive);
+        var cmsSync = syncCmsManifest ? Fh5CmsManifest.SyncWorkspace(root) : new Fh5CmsManifest.SyncResult(0, 0);
         var plans = new Dictionary<Entry, (Content Content, bool Changed)>(); int changed = 0, completed = 0; long total = 0;
         foreach (var entry in archive.Entries)
         {
@@ -219,7 +220,7 @@ public static class Fh5ZipArchive
                 }
             }
             File.Move(partial, destination); owned = false;
-            return new(archive.Entries.Count, changed, manifest.OriginalName, destination);
+            return new(archive.Entries.Count, changed, manifest.OriginalName, destination, cmsSync.UpdatedManifests, cmsSync.UpdatedEntries);
         }
         finally { if (owned && File.Exists(partial)) File.Delete(partial); }
     }

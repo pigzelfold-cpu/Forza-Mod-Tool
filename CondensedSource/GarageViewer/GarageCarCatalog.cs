@@ -86,7 +86,7 @@ public sealed class GarageCarCatalog : IDisposable
                     };
                 })
                 .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase).ThenBy(c => c.Year).ToArray();
-            if (game == ForzaGame.Horizon2)
+            if (game is ForzaGame.Horizon2 or ForzaGame.Horizon3 or ForzaGame.Horizon4)
                 Cars = Cars.Select(c => {
                     try { _ = StockConfiguration(c.Id); return c; }
                     catch (InvalidDataException ex) { return c with { StockConfigurationWarning = ex.Message }; }

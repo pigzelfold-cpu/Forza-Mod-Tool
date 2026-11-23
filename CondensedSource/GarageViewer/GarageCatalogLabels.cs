@@ -23,15 +23,15 @@ internal sealed class GarageCatalogLabels(string source)
     {
         foreach (string folder in Folders(source))
         {
-            string loose = Path.Combine(folder, "EN", table + ".str");
-            string archive = Path.Combine(folder, "EN.zip");
+            string loose = Fh3NameCodec.ResolveExistingPath(folder, Path.Combine("EN", table + ".str"));
+            string archive = Fh3NameCodec.ResolveExistingPath(folder, "EN.zip");
             try
             {
                 byte[]? bytes = null;
                 if (File.Exists(loose))
                 {
                     using var stream = File.OpenRead(loose);
-                    if (stream.Length is < 140 or > 4_194_304) return new Dictionary<uint, string>();
+                    if (stream.Length is < 16 or > 4_194_304) return new Dictionary<uint, string>();
                     bytes = new byte[checked((int)stream.Length)]; stream.ReadExactly(bytes);
                 }
                 else if (File.Exists(archive))
@@ -39,10 +39,16 @@ internal sealed class GarageCatalogLabels(string source)
                     if (new FileInfo(archive).Length > 64_000_000) return new Dictionary<uint, string>();
                     using var zip = ZipFile.OpenRead(archive);
                     if (zip.Entries.Count > 4096) return new Dictionary<uint, string>();
-                    var matches = zip.Entries.Where(e => e.FullName.Replace('\\', '/').Split('/').Last().Equals(table + ".str", StringComparison.OrdinalIgnoreCase)).ToArray();
+                    string targetName = table + ".str";
+                    var matches = zip.Entries.Where(e =>
+                    {
+                        string leaf = e.FullName.Replace('\\', '/').Split('/').Last();
+                        return leaf.Equals(targetName, StringComparison.OrdinalIgnoreCase)
+                            || Fh3NameCodec.Decode(leaf).Equals(targetName, StringComparison.OrdinalIgnoreCase);
+                    }).ToArray();
                     if (matches.Length > 1) return new Dictionary<uint, string>();
                     if (matches.Length == 0) continue;
-                    var entry = matches[0]; if (entry.Length is < 140 or > 4_194_304) return new Dictionary<uint, string>();
+                    var entry = matches[0]; if (entry.Length is < 16 or > 4_194_304) return new Dictionary<uint, string>();
                     using var stream = entry.Open(); bytes = new byte[checked((int)entry.Length)]; stream.ReadExactly(bytes);
                 }
                 if (bytes != null) return new UpgradeStringTable(bytes, table).Values;
@@ -61,12 +67,13 @@ internal sealed class GarageCatalogLabels(string source)
     {
         var parent = Directory.GetParent(Path.GetFullPath(path));
         if (parent == null) yield break;
-        if (parent.Name.Equals("stripped", StringComparison.OrdinalIgnoreCase) && parent.Parent is { } media &&
-            (media.Name.Equals("media", StringComparison.OrdinalIgnoreCase) || media.Name.Equals("mediapc", StringComparison.OrdinalIgnoreCase)) && media.Parent is { } root)
+        if (Fh3NameCodec.Decode(parent.Name).Equals("stripped", StringComparison.OrdinalIgnoreCase) && parent.Parent is { } media &&
+            Fh3NameCodec.Decode(media.Name) is var mediaName &&
+            (mediaName.Equals("media", StringComparison.OrdinalIgnoreCase) || mediaName.Equals("mediapc", StringComparison.OrdinalIgnoreCase)) && media.Parent is { } root)
         {
-            yield return Path.Combine(root.FullName, "MediaPC", "stripped", "stringtables");
-            yield return Path.Combine(root.FullName, "media", "stripped", "stringtables");
+            yield return Fh3NameCodec.ResolveExistingPath(root.FullName, Path.Combine("MediaPC", "stripped", "stringtables"));
+            yield return Fh3NameCodec.ResolveExistingPath(root.FullName, Path.Combine("media", "stripped", "stringtables"));
         }
-        else yield return Path.Combine(parent.FullName, "stringtables");
+        else yield return Fh3NameCodec.ResolveExistingPath(parent.FullName, "stringtables");
     }
 }

@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Globalization;
 using System.IO;
 using System.Security.Cryptography;
@@ -20,8 +21,9 @@ public sealed class GarageProfileSession : IDisposable
     readonly byte[] _original, _stream;
     readonly ProfileContainer _profile;
     ProfileContainer _progress;
-    readonly bool _encrypted, _isFh5;
-    public ForzaGame Game => _isFh5 ? ForzaGame.Horizon5 : ForzaGame.Horizon6;
+    readonly bool _encrypted;
+    readonly ForzaGame _game;
+    public ForzaGame Game => _game;
     readonly HashSet<long> _pending = new();
     long? _pendingReplacementId;
     readonly HashSet<string> _barnVins = new(StringComparer.OrdinalIgnoreCase);
@@ -59,29 +61,48 @@ public sealed class GarageProfileSession : IDisposable
     {
         SourcePath = Path.GetFullPath(source); _original = File.ReadAllBytes(SourcePath);
         SourceHash = Convert.ToHexString(SHA256.HashData(_original));
-        bool fh5 = Fh5ProfileCrypto.HasHeaderAuthentication(_original.Length, _original);
-        if (fh5)
+        ForzaGame game;
+        if (Fh3ProfileHelper.IsEncryptedProfile(_original))
         {
             _encrypted = true;
+            game = ForzaGame.Horizon3;
+            _stream = Fh3ProfileHelper.Decrypt(_original);
+        }
+        else if (Fh4ProfileHelper.IsEncryptedProfile(_original))
+        {
+            _encrypted = true;
+            game = ForzaGame.Horizon4;
+            _stream = Fh4ProfileHelper.Decrypt(_original);
+        }
+        else if (Fh5ProfileCrypto.HasHeaderAuthentication(_original.Length, _original))
+        {
+            _encrypted = true;
+            game = ForzaGame.Horizon5;
             _stream = Fh5ProfileCrypto.Decrypt(_original);
         }
         else if (_original.Length >= 4 && _original.AsSpan(0, 4).SequenceEqual(new byte[] { 0xB6, 0xF2, 0x8B, 0x4A }))
         {
             _encrypted = false;
+            game = ForzaGame.Horizon6;
             _stream = _original;
         }
         else
         {
             _encrypted = true;
+            game = ForzaGame.Horizon6;
             _stream = ProfileData.Decrypt(_original);
         }
         _profile = ProfileContainer.Parse(_stream);
-        if (!_encrypted && Fh5ProfileCrypto.IsProfileDatabase(_profile.Database))
-            fh5 = true;
-        _isFh5 = fh5;
+        if (!_encrypted)
+        {
+            if (Fh3ProfileHelper.IsDecryptedFh3Profile(_profile)) game = ForzaGame.Horizon3;
+            else if (Fh4ProfileHelper.IsDecryptedFh4Profile(_profile)) game = ForzaGame.Horizon4;
+            else if (Fh5ProfileCrypto.IsProfileDatabase(_profile.Database)) game = ForzaGame.Horizon5;
+        }
+        _game = game;
         _progress = _profile;
 #if PROFILE_UNLOCK_TESTING
-        if (!_isFh5) ProfileGameData.AttachAutomatically(_profile);
+        if (_game == ForzaGame.Horizon6) ProfileGameData.AttachAutomatically(_profile);
 #endif
         _work = Path.Combine(FH6LocalCryptoTool.TempWorkspace.Root, $"forza_garage_profile_{Environment.ProcessId}_{Guid.NewGuid():N}.sqlite");
         File.WriteAllBytes(_work, _profile.Database);
@@ -123,6 +144,7 @@ public sealed class GarageProfileSession : IDisposable
             // valid pending ID so a new car cannot take over that reference.
             _nextId = Math.Max(L(Scalar("SELECT COALESCE(MAX(Id),0) FROM Career_Garage")), _pending.Append(CurrentGarageId).Where(id => id > 0 && id <= int.MaxValue).DefaultIfEmpty().Max());
             if (_tables.Contains("Career_PurchasedParts")) _nextId = Math.Max(_nextId, L(Scalar("SELECT COALESCE(MAX(GarageId),0) FROM Career_PurchasedParts")));
+            if (_tables.Contains("LastUsedGarageId")) _nextId = Math.Max(_nextId, L(Scalar("SELECT COALESCE(MAX(LastUsedGarageId),0) FROM LastUsedGarageId")));
             _nextId = _nextId >= int.MaxValue ? (long)int.MaxValue + 1 : _nextId + 1;
             _originalNextId = _nextId;
         } catch { _db.Dispose(); Cleanup(_work); throw; }
@@ -250,16 +272,17 @@ public sealed class GarageProfileSession : IDisposable
     static readonly string[] History = { "PartsValue","DistanceDriven","TimeDriven","TotalWinnings","TotalRepairs","NumVictories","NumPodiums","NumRaces","NumTimesSold","TimeDrivenInRoadTrips","CurOwnerNumRaces","CurOwnerWinnings","NumSkillPointsEarned","HighestSkillScore","SharedID","IsFavorite","HasCurrentOwnerViewedCar" };
     long Insert(Dictionary<string,object> row) {
         if(_nextId>int.MaxValue)throw new InvalidOperationException("Garage entry ID range exhausted.");
-        row["Id"]=_nextId; row["Guid"]=System.Guid.NewGuid().ToString();
+        long assigned = _nextId;
+        row["Id"]=assigned; row["Guid"]=System.Guid.NewGuid().ToString();
         string[] columns=row.Keys.Where(_garageColumns.Contains).ToArray();
         Exec("INSERT INTO Career_Garage ("+string.Join(",",columns.Select(Q))+") VALUES ("+string.Join(",",Enumerable.Range(0,columns.Length).Select(i=>"$p"+i))+")",columns.Select(c=>row[c]).ToArray());
+        if (_tables.Contains("LastUsedGarageId"))
+            Exec("UPDATE LastUsedGarageId SET LastUsedGarageId=$p0 WHERE LastUsedGarageId<$p0", assigned);
         return _nextId++;
     }
     public long Duplicate(long garageId) {
         var row=Row(garageId); long added=0;
-        string journalSummary = "";
-        var progress = _isFh5 ? _progress : PrepareCollectionJournal(new[]{L(row["CarId"])},out journalSummary);
-        string summary = _isFh5 ? "" : journalSummary;
+        var progress = PrepareProgressForCars(new[]{L(row["CarId"])}, out string summary);
         foreach(string field in History.Where(f=>f!="PartsValue"))if(row.ContainsKey(field))row[field]=0L;
         Atomic(()=>{
             added=Insert(row);
@@ -286,11 +309,58 @@ public sealed class GarageProfileSession : IDisposable
         // Resolve every configuration before writing. One transaction means a bad
         // model or failed insert cannot leave a partially added manufacturer/batch.
         var rows=ids.Select(id=>CreateStockRow(id,catalog)).ToArray();
-        string journalSummary = "";
-        var progress = _isFh5 ? _progress : PrepareCollectionJournal(ids,out journalSummary);
+        var progress = PrepareProgressForCars(ids, out string summary);
         var added=new List<long>();Atomic(()=>{foreach(var row in rows)added.Add(Insert(row));}, additionsOnly: true);
-        _progress=progress;JournalSyncSummary = _isFh5 ? "" : journalSummary;
+        _progress=progress;JournalSyncSummary = summary;
         return added;
+    }
+    ProfileContainer PrepareProgressForCars(IEnumerable<long> carIds, out string summary)
+    {
+        if (_game is ForzaGame.Horizon3 or ForzaGame.Horizon5) { summary = ""; return _progress; }
+        if (_game == ForzaGame.Horizon4) return PrepareFh4CarCollection(carIds, out summary);
+        return PrepareCollectionJournal(carIds, out summary);
+    }
+    ProfileContainer PrepareFh4CarCollection(IEnumerable<long> carIds, out string summary)
+    {
+        summary = "";
+        var staged = ProfileContainer.Parse(_progress.Serialize());
+        var career = staged.Career;
+        if (career == null) return staged;
+        var addIds = carIds.Where(id => id is > 0 and <= uint.MaxValue).Select(id => (uint)id).Distinct().ToArray();
+        if (addIds.Length == 0) return staged;
+        int newlyCollected = 0;
+        foreach (string recordName in new[] { "GarageSaveState", "CarCollectionThreadCarsCollected" })
+        {
+            var records = career.Records.Where(r => r.Name == recordName).ToArray();
+            if (records.Length != 1) continue;
+            byte[] payload = records[0].Payload;
+            if (payload.Length < 8 || BinaryPrimitives.ReadUInt32LittleEndian(payload.AsSpan(0, 4)) != 0) continue;
+            uint count = BinaryPrimitives.ReadUInt32LittleEndian(payload.AsSpan(4, 4));
+            if (count > 100_000 || payload.Length != 8L + count * 4L) continue;
+            var list = new List<uint>((int)count + addIds.Length);
+            var seen = new HashSet<uint>((int)count);
+            bool valid = true;
+            for (int i = 0; i < count; i++)
+            {
+                uint id = BinaryPrimitives.ReadUInt32LittleEndian(payload.AsSpan(8 + i * 4, 4));
+                if (!seen.Add(id)) { valid = false; break; }
+                list.Add(id);
+            }
+            if (!valid) continue;
+            int added = 0;
+            foreach (uint carId in addIds)
+                if (seen.Add(carId)) { list.Add(carId); added++; }
+            if (added == 0) continue;
+            byte[] next = new byte[8 + list.Count * 4];
+            BinaryPrimitives.WriteUInt32LittleEndian(next.AsSpan(0, 4), 0);
+            BinaryPrimitives.WriteUInt32LittleEndian(next.AsSpan(4, 4), (uint)list.Count);
+            for (int i = 0; i < list.Count; i++)
+                BinaryPrimitives.WriteUInt32LittleEndian(next.AsSpan(8 + i * 4, 4), list[i]);
+            career.ReplacePayload(records[0], next);
+            newlyCollected = Math.Max(newlyCollected, added);
+        }
+        if (newlyCollected > 0) summary = $"FH4 Car Collector synced (+{newlyCollected} model(s)).";
+        return staged;
     }
     ProfileContainer PrepareCollectionJournal(IEnumerable<long> carIds,out string summary) {
 #if PROFILE_UNLOCK_TESTING
@@ -309,9 +379,10 @@ public sealed class GarageProfileSession : IDisposable
             else if(configuration.TryGetValue(name,out var value))row[name]=value;
             else if(History.Contains(name))row[name]=0L;
             else if(name is "NumOwners")row[name]=1L;
-            else if(name is "Flags")row[name]=11L; // observed stock/untuned entries
+            else if(name is "Flags")row[name]=_game is ForzaGame.Horizon3 or ForzaGame.Horizon4 ? 8L : 11L; // observed stock/untuned entries
+            else if(name is "RebuildModTorque" or "RebuildModGrip" or "RebuildModBraking" or "RebuildModWeight" or "RebuildScore")row[name]=0L;
             else if(name is "DefaultManufacturerColorIndex")row[name]=0L;
-            else if(name is "VersionedTuneId" or "VersionedLiveryId")row[name]=System.Guid.Empty.ToString();
+            else if(name is "VersionedTuneId" or "VersionedLiveryId")row[name]=type.Contains("INT",StringComparison.OrdinalIgnoreCase)?-1L:System.Guid.Empty.ToString();
             else if(name is "VersionedTuneXUID")row[name]=0L;
             else if(name is "TuneFileName" or "LiveryFileName" or "OriginalOwner")row[name]="";
             else if(name is "Guid")row[name]=System.Guid.NewGuid().ToString();
@@ -323,7 +394,7 @@ public sealed class GarageProfileSession : IDisposable
     }
     public void Export(string destination) {
         destination=Path.GetFullPath(destination);
-        if (_isFh5 && SaveLocator.IsLiveWgsContainerPath(destination))
+        if (_game is ForzaGame.Horizon3 or ForzaGame.Horizon4 or ForzaGame.Horizon5 && SaveLocator.IsLiveWgsContainerPath(destination))
             throw new InvalidOperationException("Cannot export directly into a live Windows Store (WGS) save directory. Save to a separate folder first.");
         if(destination.Equals(SourcePath,StringComparison.OrdinalIgnoreCase)||File.Exists(destination))throw new IOException("Choose a new output filename; input and existing files are never overwritten.");
         if(Convert.ToString(Scalar("PRAGMA integrity_check"))!="ok")throw new InvalidDataException("Garage database failed integrity_check; no save exported.");
@@ -340,6 +411,8 @@ public sealed class GarageProfileSession : IDisposable
             if (CurrentGarageId != _originalCurrentId) references.Add("/Main/CareerCar", CurrentGarageId);
             if (_pendingReplacementId is long pending)
                 references.Add("/Main/CareerCarNext", pending);
+            if (_game == ForzaGame.Horizon3 && CanWriteCarReference("/CompareStats/CarsInGarage"))
+                references["/CompareStats/CarsInGarage"] = Count;
             foreach (var (path, id) in references)
             {
                 var node = exported.Properties?.Walk().Single(p => p.Path == path).Node;
@@ -347,8 +420,20 @@ public sealed class GarageProfileSession : IDisposable
                     throw new InvalidDataException($"The {path} reference could not be serialized; no save exported.");
             }
             byte[] stream=exported.Serialize();
-            byte[] bytes = _encrypted ? (_isFh5 ? Fh5ProfileCrypto.Encrypt(stream, _original) : ProfileData.Encrypt(stream, _original)) : stream;
-            byte[] check = _encrypted ? (_isFh5 ? Fh5ProfileCrypto.Decrypt(bytes) : ProfileData.Decrypt(bytes)) : bytes;
+            byte[] bytes = _encrypted ? _game switch
+            {
+                ForzaGame.Horizon3 => Fh3ProfileHelper.Encrypt(stream, _original),
+                ForzaGame.Horizon4 => Fh4ProfileHelper.Encrypt(stream, _original),
+                ForzaGame.Horizon5 => Fh5ProfileCrypto.Encrypt(stream, _original),
+                _ => ProfileData.Encrypt(stream, _original),
+            } : stream;
+            byte[] check = _encrypted ? _game switch
+            {
+                ForzaGame.Horizon3 => Fh3ProfileHelper.Decrypt(bytes),
+                ForzaGame.Horizon4 => Fh4ProfileHelper.Decrypt(bytes),
+                ForzaGame.Horizon5 => Fh5ProfileCrypto.Decrypt(bytes),
+                _ => ProfileData.Decrypt(bytes),
+            } : bytes;
             if(!stream.AsSpan().SequenceEqual(check))throw new InvalidDataException("Exported save failed payload round-trip verification.");
             var packed=ProfileContainer.Parse(check);
             // Restore the edited references on the verification copy before comparing progress.

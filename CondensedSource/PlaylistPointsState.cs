@@ -17,7 +17,7 @@ public static partial class PlaylistPointsState
     sealed record TrackSeries(uint Id, List<Track> Tracks);
     sealed record Tail(int Offset, List<TrackSeries> Series, byte[] Metadata, int LifetimeOffset, int Lifetime);
     sealed record State(uint Version, Dictionary<uint, Score> Series, Dictionary<(uint Series, uint Season), Score> Seasons, Tail Tail, int ContentOffset,
-        int ScoreMapsOffset, List<uint> SeasonRoots, int BaseTrack);
+        int ScoreMapsOffset, List<uint> SeasonRoots, int BaseTrack, HashSet<uint> RewardSeries);
 
     public static bool TryRead(ProfileContainer? container, out Season[] seasons, out string reason)
     {
@@ -32,8 +32,9 @@ public static partial class PlaylistPointsState
     public static bool TrySet(ProfileContainer? container, uint series, uint season, int points, out bool changed, out string reason)
     {
         changed = false; reason = "Playlist score maps are not recognized; nothing was changed.";
-        if (points < 0 || !TryRecord(container, out var record) || !TryParse(record!.Payload, out var state, out reason)
-            || !state!.Seasons.TryGetValue((series, season), out var old)) return false;
+        if (points < 0 || !TryRecord(container, out var record) || !TryParse(record!.Payload, out var state, out reason)) return false;
+        if (state!.Version == 8) return TrySetV8(container!, record!, state, series, season, points, out changed, out reason);
+        if (!state.Seasons.TryGetValue((series, season), out var old)) return false;
         long delta = (long)points - old.Value;
         if (delta == 0) { reason = ""; return true; }
         if (!TrackScoresMatch(state, series))
@@ -62,22 +63,191 @@ public static partial class PlaylistPointsState
         }
         using var output = new MemoryStream(); using (var writer = new BinaryWriter(output, System.Text.Encoding.UTF8, true))
         {
-            writer.Write(prefix); writer.Write((uint)trackSeries.Count);
-            foreach (var item in trackSeries) { writer.Write(item.Id); writer.Write((uint)item.Tracks.Count); foreach (var track in item.Tracks) { writer.Write(track.Id); writer.Write(track.Points); } }
-            if (state.Version != 8)
-            {
-                byte[] metadata = (byte[])state.Tail.Metadata.Clone(); Put(metadata, state.Tail.LifetimeOffset, (int)lifetime);
-                writer.Write(metadata);
-            }
+            writer.Write(prefix);
+            WriteTrackSeries(writer, trackSeries);
+            byte[] metadata = (byte[])state.Tail.Metadata.Clone(); Put(metadata, state.Tail.LifetimeOffset, (int)lifetime);
+            writer.Write(metadata);
         }
         byte[] edited = output.ToArray();
         if (!TryParse(edited, out var verified, out reason) || verified!.Seasons[(series, season)].Value != points
             || verified.Series[series].Value != nextSeries || verified.Tail.Lifetime != lifetime) return false;
-        var staged = ProfileContainer.Parse(container!.Serialize());
+        if (!CommitEditedPayload(container!, record!, edited)) return false;
+        changed = true; reason = ""; return true;
+    }
+
+    static bool TrySetV8(ProfileContainer container, BinaryCareer.Record record, State state, uint series, uint season, int points, out bool changed, out string reason)
+    {
+        changed = false; reason = "Playlist score maps are not recognized; nothing was changed.";
+        if (series == 0 || season > 3 || points < 0) return false;
+        if (state.Seasons.TryGetValue((series, season), out var old))
+        {
+            long delta = (long)points - old.Value;
+            if (delta == 0) { reason = ""; return true; }
+            if (!TrackScoresMatch(state, series))
+            { reason = "This Series has different saved point totals. Use Complete playlist with matching game data to rebuild them. Nothing was changed."; return false; }
+            long nextSeries = state.Series[series].Value + delta;
+            if (nextSeries is < 0 or > int.MaxValue)
+            { reason = "That score would overflow a total or remove points belonging to another track. Nothing was changed."; return false; }
+            byte[] prefix = record.Payload[..state.Tail.Offset];
+            Put(prefix, old.Offset, points); Put(prefix, state.Series[series].Offset, (int)nextSeries);
+            var trackSeries = AdjustTracksV8(state, series, delta, nextSeries);
+            using var output = new MemoryStream();
+            using (var writer = new BinaryWriter(output, System.Text.Encoding.UTF8, true))
+            {
+                writer.Write(prefix);
+                WriteTrackSeries(writer, trackSeries);
+            }
+            byte[] edited = output.ToArray();
+            if (!TryParse(edited, out var verified, out reason) || verified!.Seasons[(series, season)].Value != points
+                || verified.Series[series].Value != nextSeries) return false;
+            if (!CommitEditedPayload(container, record, edited)) return false;
+            changed = true; reason = ""; return true;
+        }
+        else
+        {
+            if (points == 0 && !state.Series.ContainsKey(series)) { reason = ""; return true; }
+            if (!TryActivityMaps(record.Payload, state.ContentOffset, state.Series, state.Version, out var activityState)) return false;
+            int? defMax = GetFh5SeriesMaximum(container, series);
+            if (!state.RewardSeries.Contains(series) && !activityState!.Maxima.ContainsKey(series) && defMax == null) return false;
+            if (state.Series.ContainsKey(series) && !TrackScoresMatch(state, series))
+            { reason = "This Series has different saved point totals. Use Complete playlist with matching game data to rebuild them. Nothing was changed."; return false; }
+            long oldSeries = state.Series.GetValueOrDefault(series)?.Value ?? 0;
+            long nextSeries = oldSeries + points;
+            if (nextSeries is < 0 or > int.MaxValue)
+            { reason = "That score would overflow a total or remove points belonging to another track. Nothing was changed."; return false; }
+            var targetSeasons = Enumerable.Range(0, 4).Select(i =>
+            {
+                uint idx = (uint)i;
+                int val = idx == season ? points : (state.Seasons.TryGetValue((series, idx), out var ex) ? ex.Value : 0);
+                return (idx, val);
+            }).ToArray();
+            var trackSeries = AdjustTracksV8(state, series, points, nextSeries);
+            using var output = new MemoryStream();
+            using (var writer = new BinaryWriter(output, System.Text.Encoding.UTF8, true))
+            {
+                WriteScoreMaps(writer, record.Payload, state, series, (int)nextSeries, targetSeasons);
+                if (activityState!.Maxima.ContainsKey(series))
+                {
+                    writer.Write(record.Payload.AsSpan(state.ContentOffset, activityState.Start - state.ContentOffset));
+                }
+                else
+                {
+                    int maxPts = defMax ?? Math.Max((int)nextSeries, 260);
+                    ulong token = activityState.MaximaEntries.LastOrDefault()?.Token ?? 0UL;
+                    var nextMaxima = activityState.MaximaEntries.ToList();
+                    nextMaxima.Add(new MaximumEntry(series, token, maxPts, new() { new(state.BaseTrack, maxPts) }, new() { [state.BaseTrack] = maxPts }));
+                    WriteMaxima(writer, nextMaxima);
+                }
+                writer.Write(record.Payload.AsSpan(activityState.Start, state.Tail.Offset - activityState.Start));
+                WriteTrackSeries(writer, trackSeries);
+            }
+            byte[] edited = output.ToArray();
+            if (!TryParse(edited, out var verified, out reason) || verified!.Seasons[(series, season)].Value != points
+                || verified.Series[series].Value != nextSeries) return false;
+            if (!CommitEditedPayload(container, record, edited)) return false;
+            changed = true; reason = ""; return true;
+        }
+    }
+
+    static List<TrackSeries> AdjustTracksV8(State state, uint series, long delta, long nextSeries)
+    {
+        var trackSeries = state.Tail.Series.Select(s => new TrackSeries(s.Id, s.Tracks.ToList())).ToList();
+        var target = trackSeries.SingleOrDefault(s => s.Id == series);
+        if (nextSeries == 0)
+        {
+            if (target != null) trackSeries.Remove(target);
+            return trackSeries;
+        }
+        if (target == null)
+        {
+            trackSeries.Add(new(series, new() { new(state.BaseTrack, (int)nextSeries) }));
+            return trackSeries;
+        }
+        if (delta > 0)
+        {
+            int idx = target.Tracks.FindIndex(t => t.Id == state.BaseTrack);
+            if (idx < 0) target.Tracks.Add(new(state.BaseTrack, (int)delta));
+            else target.Tracks[idx] = new(state.BaseTrack, checked((int)(target.Tracks[idx].Points + delta)));
+        }
+        else if (delta < 0)
+        {
+            long rem = -delta;
+            var order = new List<int>();
+            int baseIdx = target.Tracks.FindIndex(t => t.Id == state.BaseTrack);
+            if (baseIdx >= 0) order.Add(baseIdx);
+            int negIdx = target.Tracks.FindIndex(t => t.Id == -1);
+            if (negIdx >= 0 && !order.Contains(negIdx)) order.Add(negIdx);
+            for (int i = 0; i < target.Tracks.Count; i++) if (!order.Contains(i)) order.Add(i);
+            foreach (int idx in order)
+            {
+                if (rem <= 0) break;
+                int avail = target.Tracks[idx].Points;
+                int take = (int)Math.Min(rem, avail);
+                target.Tracks[idx] = new(target.Tracks[idx].Id, avail - take);
+                rem -= take;
+            }
+            target.Tracks.RemoveAll(t => t.Points == 0);
+            if (target.Tracks.Count == 0) trackSeries.Remove(target);
+        }
+        return trackSeries;
+    }
+
+    static int? GetFh5SeriesMaximum(ProfileContainer container, uint series)
+    {
+#if PROFILE_UNLOCK_TESTING
+        return Fh5ProfileGameData.For(container)?.PlaylistsById.GetValueOrDefault(series)?.Maximum;
+#else
+        return null;
+#endif
+    }
+
+    static bool CommitEditedPayload(ProfileContainer container, BinaryCareer.Record record, byte[] edited)
+    {
+        var staged = ProfileContainer.Parse(container.Serialize());
         staged.Career!.ReplacePayload(staged.Career.Records.Single(r => r.Name == Name), edited);
         byte[] roundtrip = staged.Serialize();
         if (!ProfileContainer.Parse(roundtrip).Serialize().AsSpan().SequenceEqual(roundtrip)) return false;
-        container.Career!.ReplacePayload(record, edited); changed = true; reason = ""; return true;
+        container.Career!.ReplacePayload(record, edited);
+        return true;
+    }
+
+    static void WriteTrackSeries(BinaryWriter w, List<TrackSeries> trackSeries)
+    {
+        w.Write((uint)trackSeries.Count);
+        foreach (var item in trackSeries)
+        {
+            w.Write(item.Id);
+            w.Write((uint)item.Tracks.Count);
+            foreach (var track in item.Tracks) { w.Write(track.Id); w.Write(track.Points); }
+        }
+    }
+
+    static void WriteScoreMaps(BinaryWriter w, byte[] original, State state, uint targetSeries, int targetSeriesScore, IReadOnlyList<(uint Index, int Points)> targetSeasons)
+    {
+        // Keep the version and both reward-claim maps exactly as loaded.
+        w.Write(original.AsSpan(0, state.ScoreMapsOffset));
+        var scores = state.Series.ToDictionary(p => p.Key, p => p.Value.Value);
+        scores[targetSeries] = targetSeriesScore;
+        w.Write((uint)scores.Count);
+        foreach (var item in scores) { w.Write(item.Key); w.Write(item.Value); }
+        var roots = state.SeasonRoots.ToList();
+        if (!roots.Contains(targetSeries)) roots.Add(targetSeries);
+        w.Write((uint)roots.Count);
+        foreach (uint id in roots)
+        {
+            w.Write(id);
+            if (id == targetSeries)
+            {
+                w.Write((uint)targetSeasons.Count);
+                foreach (var season in targetSeasons) { w.Write(season.Index); w.Write(season.Points); }
+            }
+            else
+            {
+                var seasons = state.Seasons.Where(p => p.Key.Series == id).ToArray();
+                w.Write((uint)seasons.Length);
+                foreach (var season in seasons) { w.Write(season.Key.Season); w.Write(season.Value.Value); }
+            }
+        }
     }
 
     static bool TryRecord(ProfileContainer? container, out BinaryCareer.Record? record)
@@ -99,15 +269,16 @@ public static partial class PlaylistPointsState
             int baseTrack = version == 8 ? 800 : 820;
             // Season reward maps, then Series reward maps. Each reward has a
             // saved ID and three acquisition flags; never rewrite any flag.
-            uint count = r.Count(MaxSeries); var roots = new HashSet<uint>();
+            uint count = r.Count(MaxSeries); var roots = new HashSet<uint>(); var rewardSeries = new HashSet<uint>();
             for (int i = 0; i < count; i++)
             {
-                if (!roots.Add(r.U32())) return false;
+                uint sid = r.U32(); if (!roots.Add(sid)) return false;
+                rewardSeries.Add(sid);
                 uint seasons = r.Count(4); var keys = new HashSet<uint>();
                 for (int j = 0; j < seasons; j++) { uint key = r.U32(); if (key > 3 || !keys.Add(key)) return false; r.Rewards(version); }
             }
             count = r.Count(MaxSeries); roots.Clear();
-            for (int i = 0; i < count; i++) { if (!roots.Add(r.U32())) return false; r.Rewards(version); }
+            for (int i = 0; i < count; i++) { uint sid = r.U32(); if (!roots.Add(sid)) return false; rewardSeries.Add(sid); r.Rewards(version); }
             int scoreMapsOffset = r.Offset;
             count = r.Count(MaxSeries); var series = new Dictionary<uint, Score>();
             for (int i = 0; i < count; i++) { uint id = r.U32(); var score = r.Score(); if (!series.TryAdd(id, score)) return false; }
@@ -120,7 +291,7 @@ public static partial class PlaylistPointsState
                 for (int j = 0; j < seasons; j++) { uint key = r.U32(); var score = r.Score(); if (key > 3 || !seasonScores.TryAdd((id, key), score)) return false; sum += score.Value; }
                 if (sum > series[id].Value) return false; // Series-only activities may add extra points.
             }
-            if (seasonScores.Count == 0 || series.Values.Sum(s => (long)s.Value) > int.MaxValue) return false;
+            if ((seasonScores.Count == 0 && !(version == 8 && rewardSeries.Count > 0)) || series.Values.Sum(s => (long)s.Value) > int.MaxValue) return false;
             // Parse through the activity and two season-timestamp maps to reach
             // the suffix at its exact boundary. Saved per-track caches can differ
             // from the primary scores, so their sums cannot locate that boundary.
@@ -142,7 +313,7 @@ public static partial class PlaylistPointsState
                 }
             }
             if (!TryTail(bytes, r.Offset, series, version, out var tail)) return false;
-            state = new(version, series, seasonScores, tail!, contentOffset, scoreMapsOffset, seasonRoots, baseTrack); reason = ""; return true;
+            state = new(version, series, seasonScores, tail!, contentOffset, scoreMapsOffset, seasonRoots, baseTrack, rewardSeries); reason = ""; return true;
         }
         catch (Exception error) when (error is InvalidDataException or ArgumentOutOfRangeException or OverflowException) { return false; }
     }
@@ -162,7 +333,7 @@ public static partial class PlaylistPointsState
                 if (sum > int.MaxValue) return false;
                 series.Add(new(id, values));
             }
-            if (scores.Any(s => s.Value.Value > 0 && !seen.Contains(s.Key))) return false;
+            if (version != 8 && scores.Any(s => s.Value.Value > 0 && !seen.Contains(s.Key))) return false;
             if (version == 8)
             {
                 if (r.Offset != bytes.Length) return false;
@@ -180,9 +351,12 @@ public static partial class PlaylistPointsState
         catch (Exception error) when (error is InvalidDataException or ArgumentOutOfRangeException or OverflowException) { return false; }
     }
 
-    static bool TrackScoresMatch(State state, uint series) =>
-        (state.Tail.Series.SingleOrDefault(s => s.Id == series)?.Tracks.Sum(t => (long)t.Points) ?? 0)
-            == (state.Series.GetValueOrDefault(series)?.Value ?? 0);
+    static bool TrackScoresMatch(State state, uint series)
+    {
+        var tracks = state.Tail.Series.SingleOrDefault(s => s.Id == series);
+        if (state.Version == 8 && tracks == null) return true;
+        return (tracks?.Tracks.Sum(t => (long)t.Points) ?? 0) == (state.Series.GetValueOrDefault(series)?.Value ?? 0);
+    }
 
     sealed class Reader(byte[] bytes)
     {

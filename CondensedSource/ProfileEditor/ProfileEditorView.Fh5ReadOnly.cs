@@ -10,7 +10,11 @@ namespace FH6ProfileEditor;
 
 public partial class ProfileEditorView
 {
-    bool _isFh5;
+    ForzaGame _game = ForzaGame.Horizon6;
+    bool _isFh3 => _game == ForzaGame.Horizon3;
+    bool _isFh4 => _game == ForzaGame.Horizon4;
+    bool _isFh5 => _game == ForzaGame.Horizon5;
+    bool _usesTablePaging => _game is ForzaGame.Horizon3 or ForzaGame.Horizon4 or ForzaGame.Horizon5;
     int _fh5TableOffset;
     long _fh5TableRows;
 
@@ -23,13 +27,17 @@ public partial class ProfileEditorView
         GridHint.Text = "double-click a cell to edit";
         PropEditHint.Text = "double-click a value to edit";
         StringEditHint.Text = "double-click the Text column to edit";
-        Fh5TablePages.Visibility = _isFh5 ? Visibility.Visible : Visibility.Collapsed;
+        Fh5TablePages.Visibility = _usesTablePaging ? Visibility.Visible : Visibility.Collapsed;
         SqlCard.Visibility = DbBody.Visibility == Visibility.Visible ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    string ViewHelpForMode(string normal) => _isFh5
-        ? normal.Replace("C_ProfileData", "ProfileData").Replace("FH6", "FH5")
-        : normal;
+    string ViewHelpForMode(string normal) => _game switch
+    {
+        ForzaGame.Horizon3 => normal.Replace("C_ProfileData", "ProfileData").Replace("FH6", "FH3"),
+        ForzaGame.Horizon4 => normal.Replace("C_ProfileData", "ProfileData").Replace("FH6", "FH4"),
+        ForzaGame.Horizon5 => normal.Replace("C_ProfileData", "ProfileData").Replace("FH6", "FH5"),
+        _ => normal,
+    };
 
     void BuildFh5Overview()
     {
@@ -83,6 +91,10 @@ public partial class ProfileEditorView
         {
             OverviewPanel.Children.Add(Note("No safely recognized Festival Playlist counters were found in this save. Playlist activity data is still preserved."));
         }
+
+        // ---- Expansions (Hot Wheels & Rally Adventure) ----
+        AddFh5HotWheelsControls();
+        AddFh5RallyAdventureControls();
 
         // ---- World and unlocks ----
         OverviewPanel.Children.Add(SectionHeader("World and unlocks"));
@@ -152,14 +164,14 @@ public partial class ProfileEditorView
 
     void Fh5PreviousRows_Click(object sender, RoutedEventArgs e)
     {
-        if (!_isFh5 || _currentTable == null || _fh5TableOffset == 0) return;
+        if (!_usesTablePaging || _currentTable == null || _fh5TableOffset == 0) return;
         _fh5TableOffset = Math.Max(0, _fh5TableOffset - RowLimit);
         try { LoadTable(_currentTable); } catch (Exception ex) { Fail("previous page", ex); }
     }
 
     void Fh5NextRows_Click(object sender, RoutedEventArgs e)
     {
-        if (!_isFh5 || _currentTable == null || _fh5TableOffset + RowLimit >= _fh5TableRows) return;
+        if (!_usesTablePaging || _currentTable == null || _fh5TableOffset + RowLimit >= _fh5TableRows) return;
         _fh5TableOffset += RowLimit;
         try { LoadTable(_currentTable); } catch (Exception ex) { Fail("next page", ex); }
     }

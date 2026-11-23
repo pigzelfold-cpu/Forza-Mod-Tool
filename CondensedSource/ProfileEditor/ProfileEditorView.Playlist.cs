@@ -29,10 +29,22 @@ public partial class ProfileEditorView
         complete.Margin = new Thickness(0, 0, 0, 4);
         var chooseData = TestButton("PlaylistGameDataButton", "Choose game data…", true);
         chooseData.Margin = new Thickness(8, 0, 0, 4);
-        chooseData.ToolTip = "Select media\\ObjectModelGame.zip from your matching FH6 install.";
-        chooseData.Click += (_, _) => ChooseProfileGameData();
+        chooseData.ToolTip = _isFh5
+            ? "Select media\\stripped\\TIDETables.zip from your FH5 install."
+            : "Select media\\ObjectModelGame.zip from your matching FH6 install.";
+        chooseData.Click += (_, _) => { if (_isFh5) ChooseFh5ProfileGameData(); else ChooseProfileGameData(); };
         var status = Note(""); status.Name = "PlaylistCompletionStatus";
-        void Refresh()
+        void UpdateSelectionUi(PlaylistPointsState.Playlist selected)
+        {
+            _selectedPlaylist = selected.Series; complete.IsEnabled = selected.Supported;
+            chooseData.Visibility = selected.Supported ? Visibility.Collapsed : Visibility.Visible;
+            status.Text = selected.Supported
+                ? (selected.NeedsInitialization ? "Missing Playlist progress will be added. " : "")
+                    + (selected.NeedsScoreRepair ? "Saved point totals will be synchronized. " : "")
+                    + (_isFh5 ? "Complete all four seasons. Saved activity records, score totals and track points update automatically; rewards stay unclaimed." : "Complete all four seasons. Playlist History points update automatically; rewards stay unclaimed. Click Export save to write a separate file.")
+                : selected.Reason;
+        }
+        picker.SelectionChanged += (_, _) =>
         {
             if (picker.SelectedItem is not PlaylistPointsState.Playlist selected) return;
             if (_selectedPlaylist != selected.Series)
@@ -41,25 +53,10 @@ public partial class ProfileEditorView
                 BuildOverview();
                 return;
             }
-            _selectedPlaylist = selected.Series; complete.IsEnabled = selected.Supported;
-            chooseData.Visibility = selected.Supported ? Visibility.Collapsed : (_isFh5 ? Visibility.Collapsed : Visibility.Visible);
-            status.Text = selected.Supported
-                ? (selected.NeedsInitialization ? "Missing Playlist progress will be added. " : "")
-                    + (selected.NeedsScoreRepair ? "Saved point totals will be synchronized. " : "")
-                    + (_isFh5 ? "Complete all four seasons. Saved activity records, score totals and track points update automatically; rewards stay unclaimed." : "Complete all four seasons. Playlist History points update automatically; rewards stay unclaimed. Click Export save to write a separate file.")
-                : selected.Reason;
-        }
-        picker.SelectionChanged += (_, _) => Refresh();
+            UpdateSelectionUi(selected);
+        };
         if (picker.SelectedItem is PlaylistPointsState.Playlist initialSelected)
-        {
-            _selectedPlaylist = initialSelected.Series; complete.IsEnabled = initialSelected.Supported;
-            chooseData.Visibility = initialSelected.Supported ? Visibility.Collapsed : (_isFh5 ? Visibility.Collapsed : Visibility.Visible);
-            status.Text = initialSelected.Supported
-                ? (initialSelected.NeedsInitialization ? "Missing Playlist progress will be added. " : "")
-                    + (initialSelected.NeedsScoreRepair ? "Saved point totals will be synchronized. " : "")
-                    + (_isFh5 ? "Complete all four seasons. Saved activity records, score totals and track points update automatically; rewards stay unclaimed." : "Complete all four seasons. Playlist History points update automatically; rewards stay unclaimed. Click Export save to write a separate file.")
-                : initialSelected.Reason;
-        }
+            UpdateSelectionUi(initialSelected);
         complete.Click += (_, _) =>
         {
             if (picker.SelectedItem is not PlaylistPointsState.Playlist selected || !selected.Supported) return;
@@ -87,22 +84,44 @@ public partial class ProfileEditorView
         controls.Children.Add(picker); controls.Children.Add(complete); controls.Children.Add(chooseData);
         OverviewPanel.Children.Add(controls); OverviewPanel.Children.Add(status);
 
-        if (PlaylistPointsState.TryRead(_container, out var seasons, out _) && seasons.Length > 0)
+        if (PlaylistPointsState.TryRead(_container, out var seasons, out _))
         {
-            uint currentSeries = (picker.SelectedItem as PlaylistPointsState.Playlist)?.Series ?? _selectedPlaylist ?? seasons[0].Series;
-            var seriesSeasons = seasons.Where(s => s.Series == currentSeries).OrderBy(s => s.Index).ToList();
-            foreach (var s in seriesSeasons)
+            (bool ok, string value) ApplySeasonPoints(uint targetSeries, uint targetSeason, string text)
             {
-                OverviewPanel.Children.Add(EditRow($"{s.Name} season points", $"Series {s.Series} {s.Name} points", s.Points.ToString(CultureInfo.InvariantCulture), text =>
+                if (!int.TryParse(text.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int pts) || pts < 0)
+                    return (false, "Must be a non-negative number.");
+                if (!PlaylistPointsState.TrySet(_container, targetSeries, targetSeason, pts, out bool changed, out string err))
+                    return (false, err);
+                _hasUnlockTestEdits |= changed;
+                RefreshSaveStateDisplays(); BuildCareer(); BuildOverview();
+                return (true, pts.ToString(CultureInfo.InvariantCulture));
+            }
+
+            if (_isFh5 && picker.SelectedItem is PlaylistPointsState.Playlist activePlaylist)
+            {
+                string[] seasonNames = { "Summer", "Autumn", "Winter", "Spring" };
+                var def = Fh5ProfileGameData.For(_container)?.PlaylistsById.GetValueOrDefault(activePlaylist.Series);
+                for (uint i = 0; i < 4; i++)
                 {
-                    if (!int.TryParse(text.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int pts) || pts < 0)
-                        return (false, "Must be a non-negative number.");
-                    if (!PlaylistPointsState.TrySet(_container, s.Series, s.Index, pts, out bool changed, out string err))
-                        return (false, err);
-                    _hasUnlockTestEdits |= changed;
-                    RefreshSaveStateDisplays(); BuildCareer(); BuildOverview();
-                    return (true, pts.ToString(CultureInfo.InvariantCulture));
-                }));
+                    uint seasonIndex = i;
+                    string seasonName = seasonNames[i];
+                    int currentPts = seasons.SingleOrDefault(s => s.Series == activePlaylist.Series && s.Index == seasonIndex)?.Points ?? 0;
+                    string desc = def != null && def.Maximum == activePlaylist.Maximum && def.SeasonMaxima.Length == 4
+                        ? $"Series {activePlaylist.Series} {seasonName} points (max {def.SeasonMaxima[i]})"
+                        : $"Series {activePlaylist.Series} {seasonName} points";
+                    OverviewPanel.Children.Add(EditRow($"{seasonName} season points", desc, currentPts.ToString(CultureInfo.InvariantCulture),
+                        text => ApplySeasonPoints(activePlaylist.Series, seasonIndex, text)));
+                }
+            }
+            else if (seasons.Length > 0)
+            {
+                uint currentSeries = (picker.SelectedItem as PlaylistPointsState.Playlist)?.Series ?? _selectedPlaylist ?? seasons[0].Series;
+                var seriesSeasons = seasons.Where(s => s.Series == currentSeries).OrderBy(s => s.Index).ToList();
+                foreach (var s in seriesSeasons)
+                {
+                    OverviewPanel.Children.Add(EditRow($"{s.Name} season points", $"Series {s.Series} {s.Name} points", s.Points.ToString(CultureInfo.InvariantCulture),
+                        text => ApplySeasonPoints(s.Series, s.Index, text)));
+                }
             }
         }
         return true;

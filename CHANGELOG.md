@@ -1,6 +1,6 @@
-# Forza Mod Tool — Community Fork Additions (based on v1.3.0.6)
+# Forza Mod Tool — Community Fork Additions (based on v1.3.0.7)
 
-Changes added on top of upstream v1.3.0.6 in this fork.
+Changes added on top of upstream v1.3.0.7 in this fork.
 
 ## Car Editor: Traffic Cars in Autoshow (FH2 – FH6)
 
@@ -9,24 +9,47 @@ Changes added on top of upstream v1.3.0.6 in this fork.
 - Updates per-game visibility/drivability flags (`IsDrivable`, `IsPurchased`, `IsInstalled`, `IsUnicorn`, `IsArcade`, `NotAvailableInAutoshow`, `VisibleOnlyIfOwned`, `NotAvailableInAuctionHouse`, and FH2 `ContentId=0`), cleanly removes traffic IDs from `UnobtainableCars` in FH4–FH6 without foreign-key violations or view/backup schema drift, preserves stock `BaseCost`, avoids duplicate `OnDiscContent` rows, and assigns valid child `CarBucket` categories (keeping existing valid buckets such as FH3 `2408`).
 - Enabled single-car and multi-select **Available in Autoshow** toggling for traffic cars (including FH2 traffic cars), **Restore selected car** stock recovery, and full non-destructive revert (**− Traffic cars**) that preserves engine swaps, tuning, and custom prices.
 
-## Multi-Game Expansion (FH3, FH4, FM7, FM6 Apex, FH3 OpusDev)
+## Multi-Game Expansion & Crypto (FH3, FH4, FH5, FM7, FM6 Apex)
 
 - Added authenticated TransformIT GameDB decryption and re-encryption (`LegacyGameDb`, `LegacyTfit`, `LegacyKeys`) for **FH3**, **FH4**, **FM7**, and **FM6 Apex** in Car Editor, Crypto, and DB Browser.
 - Added **FH3** path/filename de-obfuscation and re-obfuscation (`Fh3NameCodec`) for `.~b1` / obfuscated install layouts.
 - Packaged embedded stock baselines (`FH3` build `1231512575` with 542 cars; `FH4` build `-1558258184` with 783 cars), per-game localized car display names (`FH3`, `FH4`, `FH5`), `CarBucketCatalog` localized bucket loading, stock thumbnail auto-discovery, and native FH3/FH4 drift steering-angle and whitewall/Edition tire options.
 - Added authenticated legacy asset (`File`, `ConfigFile`, `Profile`, `Reward`, `Photo`, `Dynamic`, `SFS`) and ZIP archive decrypt/re-encrypt workflows (`LegacyAssetContainer`, `LegacyZipArchive`) for **FH3**, **FH3 OpusDev**, **FH4**, **FM7**, and **FM6 Apex**.
+- Added **FH5 CMS Manifest Sync** (`Fh5CmsManifest`, `Fh5ZipArchive.Repack`): **Auto-sync CMS manifests on repack** checkbox (on by default) and standalone **Generate CMS Manifest** button in **Crypto** to recompute `Size` and SHA-256 `Checksum` entries in `on-disk-manifest.xml` and `snapshot-manifest-*.xml` for modified `CMS.zip` / extracted CMS folders.
 
 ## FH5 Profile Editor, Unlocks, Accolades, Festival Playlist, Garage Viewer & Save Swap
 
 - Unlocked full **FH5 `ProfileData` editing** and automatic re-encryption in **Profile Editor** (Credits, Total Credits, Driver XP / `/Main/TotalXP`, **Horizon Open XP** Ranks `1–1,000` via `Fh5OnlineXpState`, Skill Points, Wheelspins, Super Wheelspins, Forzathon Points, XUID, and paginated profile database/property/BXML/career views).
 - Added **FH5 TIDE & StringTable game-data loader** (`Fh5ProfileGameData`, `Fh5ZipArchive.ReadEntries` / `ReadEntriesByExtension`) with automatic discovery (and manual **Choose FH5 game data…** picker) for `media\stripped\TIDETables.zip` / `mediapc\stripped\TIDETables`, `StringTables\EN.zip`, and `Hendrix_00.nav`.
-- Added **FH5 Road Discovery** (`Fh5RoadDiscoverySaveState`): discovers all `24,498` valid Hendrix map segments in `RoadDiscovery` and updates `/CompareStats/RoadsDiscovered` (`578`).
+- Extended **FH5 Road Discovery** (`Fh5RoadDiscoverySaveState`) to discover all `24,498` Mexico (`Hendrix_00.nav`), `10,877` Hot Wheels (`rainbow_00.nav`), and `3,171` Rally Adventure (`falcon_00.nav`) road bits when present and update `/CompareStats/RoadsDiscovered` (`578`).
+- Added **FH5 Hot Wheels Academy & Rally Adventure (Sierra Nueva)** progression editing (`Fh5ExpansionsState`, `ProfileEditorView.Fh5Expansions`):
+  - **Hot Wheels Academy:** Direct editable Medals / Rank (`0–5,000`, `Unranked` to `Legend`), `25` Hot Wheels bonus boards (`_rainbow_`), and a filterable `156`-mission `SpectrumMissionSaveState` grid with Complete Selected / Complete All Visible / Reset Selected / Sync Medals.
+  - **Rally Adventure:** Direct editable team reputations & ranks (`Apex Predators`, `Horizon Raptors`, `Grit Reapers`), `30` `astra_bonus_board_` boards, and a filterable `150`-challenge `AstraChallengeSaveState` grid (`ExpansionTwoDataManager`) with floor-safe Sync. Automatically creates missing `CurrencyBucket` entries on early/unvisited saves.
 - Added **FH5 Inventory & Badge Unlocks** (`Fh5InventoryUnlockStates`, `Fh5ChallengeSaveCodec`, `Fh5BadgeUnlockState`): searchable multi-select unlock pickers for **Clothing** (`709` wardrobe items in `CharacterCustomisation`, preserving non-wardrobe/equipped slots), **Car Horns** (`208` horns including ID `0` in `CarHornSaveState`), **Emotes** (`60` emotes including ID `0` in `EmoteSaveState`), **Forza Link / QuickChat phrases** (`200` unlockable phrases in `QuickChatSaveState`), and **Badges** (`81` badges in `BadgeChallengeSaveState` + UTC earned-date editing; gracefully disabled on early saves without `BadgeChallengeSaveState`).
 - Added **FH5 Accolades Editor** (`Fh5AccoladesState`, `ProfileEditorView.Fh5Accolades`): replaces FH6's Collection Journal on FH5 saves with a virtualized, filterable Accolades grid (`2,237` accolades across `22` collections) supporting **Complete selected accolades**, **Reset selected accolades**, and **Sync points & collections**, atomically validating and syncing `CareerChallengeSaveState`, `CareerChallengeCollectionSaveState0..21`, and `CurrencyBucket_CareerProgress_career_progress` while keeping reward claims unchanged.
-- Added **FH5 Festival Playlist** completion support (`PlaylistPointsState` / `PlaylistActivityState` / `PlaylistCompletionState` v8 layout with 4-byte IDs and multi-track Mainland, Rally Adventure, Hot Wheels, and Hide & Seek maxima).
+- Extended **FH5 Festival Playlist** (`PlaylistPointsState`, `PlaylistActivityState`, `PlaylistCompletionState`, `ProfileEditorView.Playlist`) to display, edit season points for, and complete **all historical FH5 series from Series 1 onward** (not only the latest two series), with v8 4-byte ID support and multi-track maxima across Mainland, Rally Adventure, Hot Wheels, and Hide & Seek.
 - Updated **Driver XP** editing (`ProfileXpEdit`) to keep `/Main/TotalXP` synchronized with `/Main/XP`, `/Main/TotalSkills`, and `/CompareStats/WristbandLevel`.
 - Extended **Garage Viewer** to load, edit, and export **FH5 `ProfileData`** saves with FH5 stock thumbnail detection alongside FH6 and FH2/Azimuth.
 - Extended **Save Swap** (`MainWindow.SaveSwap`) to support both **FH5 `ProfileData`** and **FH6 `C_ProfileData`** donor → target transfers, with **Find save** (`SaveLocator`) auto-discovery across Steam, MS Store / Xbox (WGS & PGS), OnlineFix, EMPRESS, and RUNE save folders and automatic FH5 profile template matching.
+
+## FH4 Profile Editor, LEGO Valley & Garage Viewer
+
+- Added full **FH4 `ProfileData` editing** and authenticated re-encryption (`Fh4ProfileHelper`, `ProfileEditorView.Fh4`) for Steam and WGS saves: Credits, Total Credits, Driver XP / `/Main/TotalXP`, Skill Points, Wheelspins, Super Wheelspins, and paginated profile tables/properties/BXML/career inspection.
+- Added **FH4 TIDE & `.nav` game-data loader** (`Fh4ProfileGameData`) using `LegacyZipArchive` for `TIDETables.zip`, `EN.zip`, `UK_00.nav`, `Savage_00.nav`, and `Red_00.nav`.
+- Added **FH4 3-Map Road Discovery** (`Fh4RoadDiscoverySaveState`) covering Great Britain (`18,715` bits / `531` roads), Fortune Island (`2,686` bits), and LEGO Valley (`2,907` bits).
+- Added **FH4 Inventory Unlocks** (`Fh4InventoryUnlockStates`): Clothing, Car Horns, Emotes, QuickChat phrases, and Star Card Flairs.
+- Added **FH4 LEGO Speed Champions (LEGO Valley) & Fortune Island** progression editing (`Fh4BrickChallengesState`, `ProfileEditorView.Fh4Expansions`):
+  - **LEGO Valley:** Direct editable LEGO Bricks (`0–12,500`), Brick Challenge Tiers (`0–14`), and Master Builder's House Level (`1–16`) with optional auto-sync, **Smash all LEGO bonus boards** (`25` `_red_` boards), **Discover all LEGO landmarks** (`Red_*_save_state`), barn-find status display, and a filterable `272`-challenge `BrickChallengeSaveState` grid with Complete Selected / Complete All Visible / Reset Selected / Sync Bricks, Tiers & House. Creates missing Bricks/Tiers/House BXML objects cleanly on early saves.
+  - **Fortune Island:** Editable **Fortune Island Influence (XP)** (`CurrencyBucket_ExpansionOneCareerXP_TrackSpecificXP`) when present.
+- Extended **Garage Viewer** (`GarageProfileSession`, `GarageCarCatalog`, `GarageCatalogLabels`) to load, add, duplicate, remove, and edit owned cars in **FH4 `ProfileData`** saves using the embedded/installed FH4 car catalog (`783` cars) and stock thumbnails.
+
+## FH3 Profile Editor, Expansions & Garage Viewer
+
+- Added full **FH3 `ProfileData` editing** and authenticated re-encryption (`Fh3ProfileHelper`, `ProfileEditorView.Fh3`) for Windows Store / UWP WGS containers and loose profiles: Credits, Total Credits, Driver XP + Wristband tier calculation, Fans (`/Main/TotalSkills` & `/MiscStats/TotalFansEarned`), Skill Points, Wheelspins, **Blizzard Mountain Stars**, and **Hot Wheels Stars**.
+- Added **FH3 TIDE & `.nav` game-data loader** (`Fh3ProfileGameData`) supporting obfuscated `.~b1` and extracted `gamedbrc.slt` / `en.zip` assets.
+- Added **FH3 3-Map Road Discovery** (`Fh3RoadDiscoverySaveState`) covering Australia (`17,422` bits / `488` roads), Blizzard Mountain (`2,061` bits), and Hot Wheels (`5,408` bits).
+- Added **FH3 Inventory & Perk Unlocks** (`Fh3InventoryUnlockStates`): Car Horns (`CarHornSaveState`) and Skill Perks (`PerkUnlock` SQLite table + `/CompareStats/PerksUnlocked` sync).
+- Extended **Garage Viewer** (`GarageProfileSession`) to load, add, duplicate, remove, and edit owned cars in **FH3 `ProfileData`** saves using the embedded/installed FH3 car catalog (`542` cars) and stock thumbnails.
 
 ## Car Editor Performance & Engine Upgrade Visibility Fix
 

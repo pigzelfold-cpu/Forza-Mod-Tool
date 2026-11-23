@@ -161,7 +161,7 @@ public partial class GarageViewerView : UserControl
     async void Load_Click(object sender, RoutedEventArgs e)
     {
         if (_busy) return;
-        var dialog = new OpenFileDialog { Title = "Load FH5 / FH6 save or FH2 revision file", Filter = "Forza save files|C_ProfileData*;*.ProfileData;commit;ProfileData;PlayerDatabase;*.decrypted|All files|*.*" };
+        var dialog = new OpenFileDialog { Title = "Load FH3 / FH4 / FH5 / FH6 save or FH2 revision file", Filter = "Forza save files|C_ProfileData*;*.ProfileData;commit;ProfileData;PlayerDatabase;*.decrypted|All files|*.*" };
         if (dialog.ShowDialog() == true) await LoadProfileAsync(dialog.FileName);
     }
     async void LoadFh2_Click(object sender, RoutedEventArgs e) { if (!_busy) await _fh2Host.ChooseAsync(); }
@@ -199,7 +199,7 @@ public partial class GarageViewerView : UserControl
     async void CatalogFolder_Click(object sender, RoutedEventArgs e)
     {
         if (_busy) return;
-        var dialog = new OpenFileDialog { Title = "Choose the GameDB used by this save", Filter = "GameDB|*.slt;*.sqlite;*.db|All files|*.*" };
+        var dialog = new OpenFileDialog { Title = "Choose the GameDB used by this save", Filter = "GameDB|*.slt;*.~b1;*.sqlite;*.db|All files|*.*" };
         if (dialog.ShowDialog() == true) await LoadCatalogAsync(dialog.FileName);
     }
     async void CatalogAuto_Click(object sender, RoutedEventArgs e)
@@ -210,7 +210,8 @@ public partial class GarageViewerView : UserControl
             _catalogPreference = ""; ReloadCatalog();
         }, "Finding installed GameDB…");
     }
-    static string StockSourceSetting(ForzaGame game) => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ForzaModTool", $"garage-stock-thumbnail-source-{(game == ForzaGame.Horizon5 ? "FH5" : "FH6")}.json");
+    static string StockSourceSetting(ForzaGame game) => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ForzaModTool",
+        $"garage-stock-thumbnail-source-{(game == ForzaGame.Horizon3 ? "FH3" : game == ForzaGame.Horizon4 ? "FH4" : game == ForzaGame.Horizon5 ? "FH5" : "FH6")}.json");
     CarThumbnailLibrary? FindStockThumbnails(string? manual = null, bool resetAuto = false, ForzaGame? forzaGame = null) {
         var game = forzaGame ?? _session?.Game ?? _catalog?.Game ?? ForzaGame.Horizon6;
         string? preferred = manual;
@@ -568,9 +569,12 @@ public partial class GarageViewerView : UserControl
         var selected=CatalogList.SelectedItems.Cast<GarageCarDefinition>().Select(c=>c.Id).ToArray();
         if(selected.Length==0)return;
         IReadOnlyList<long> ids=Array.Empty<long>();
-        string statusMsg = _session.Game == ForzaGame.Horizon5
-            ? $"Creating {selected.Length} stock car configuration(s)…"
-            : $"Creating {selected.Length} stock car configuration(s) and syncing Car Collection…";
+        string statusMsg = _session.Game switch
+        {
+            ForzaGame.Horizon3 or ForzaGame.Horizon5 => $"Creating {selected.Length} stock car configuration(s)…",
+            ForzaGame.Horizon4 => $"Creating {selected.Length} stock car configuration(s) and syncing Car Collector…",
+            _ => $"Creating {selected.Length} stock car configuration(s) and syncing Car Collection…"
+        };
         await RunAsync(() => ids = _session.AddStocks(selected, _catalog), statusMsg, $"Added {selected.Length} stock car(s) to working copy. Export a new save to keep them.");
         if(ids.Count>0) {
             if (!string.IsNullOrWhiteSpace(_session.JournalSyncSummary)) StatusText.Text += "\n" + _session.JournalSyncSummary;
@@ -588,8 +592,10 @@ public partial class GarageViewerView : UserControl
     async void Export_Click(object sender, RoutedEventArgs e)
     {
         if (_busy || _session == null || !TryApplyCarFields()) return;
-        string defaultName = _session.Game == ForzaGame.Horizon5 ? "User_ProfileData.garage-edited" : "C_ProfileData.garage-edited";
+        string defaultName = _session.Game is ForzaGame.Horizon3 or ForzaGame.Horizon4 or ForzaGame.Horizon5 ? "User_ProfileData.garage-edited" : "C_ProfileData.garage-edited";
         var dialog = new SaveFileDialog { Title = "Export a new save — never overwrite your original", FileName = defaultName, Filter = "Profile save|*.*", OverwritePrompt = false };
+        if (SaveLocator.IsLiveWgsContainerPath(_session.SourcePath))
+            dialog.InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
         if (dialog.ShowDialog() == true) await RunAsync(() => _session.Export(dialog.FileName), "Exporting and verifying save payload…", "Exported: " + dialog.FileName + "\nOriginal save unchanged. Back up your whole save and close the game before installation.");
     }
     async void File_Drop(object sender, DragEventArgs e)

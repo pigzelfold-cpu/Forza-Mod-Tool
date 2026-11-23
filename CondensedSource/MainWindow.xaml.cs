@@ -255,6 +255,15 @@ public partial class MainWindow : Window
             Status("ZIP workspace staged.");
             return;
         }
+        if (Directory.Exists(path) && File.Exists(Path.Combine(path, "on-disk-manifest.xml")))
+        {
+            _pendingInput = path;
+            StagedText.Text = $"Staged: {Path.GetFileName(path)}   (CMS manifest folder → Generate CMS Manifest)";
+            StagedText.Visibility = Visibility.Visible;
+            Log("CMS manifest folder staged (without fh5-zip-roundtrip.json). Click Generate CMS Manifest to update Size/Checksum entries.");
+            Status("CMS manifest folder staged.");
+            return;
+        }
         if (Directory.Exists(path))
         {
             _pendingInput = path; // Invalid folders must never fall back to a previously staged DB.
@@ -746,7 +755,9 @@ public partial class MainWindow : Window
             string profile = extracted.EncryptedEntries > 0 ? "FH5 File / all encrypted MACs verified" : "standard ZIP / no encryption";
             Log($"Extracted [{profile}, all lengths/CRCs verified] {extracted.EntryCount:n0} entries, {extracted.OutputBytes:n0} bytes -> {outDir}");
             Log($"    Edit files, then drop the folder or {Fh5ZipArchive.ManifestName} and click Re-encrypt. Keep the metadata and .__original.zip. Adding/removing entries is not supported.");
-            Log("    Large archives use streaming. This does not install files or update an external zipmanifest.xml.");
+            Log(Path.GetFileName(zipPath).Equals("CMS.zip", StringComparison.OrdinalIgnoreCase)
+                ? "    CMS workspace detected: internal CMS manifests (Size/Checksum) will sync automatically on Re-encrypt."
+                : "    Large archives use streaming. This does not install files or update an external zipmanifest.xml.");
             Done(outDir, "ZIP extracted and verified OK.");
             return;
         }
@@ -764,12 +775,56 @@ public partial class MainWindow : Window
         if (string.IsNullOrEmpty(ext)) ext = ".zip";
         string output = UniqueOutputPath(Path.Combine(OutputDirFor(workspace), Path.GetFileNameWithoutExtension(name) + ".modded" + ext));
         Status("Rebuilding and verifying ZIP…");
+        bool syncCms = SyncCmsManifestCheck.IsChecked == true;
         var progress = new Progress<Fh5ZipArchive.Progress>(p => Status($"Checking/rebuilding ZIP: {p.Completed:n0}/{p.EntryCount:n0} entries…"));
-        var result = await Task.Run(() => Fh5ZipArchive.Repack(workspace, output, progress));
+        var result = await Task.Run(() => Fh5ZipArchive.Repack(workspace, output, progress, syncCms));
         Log($"Rebuilt [FH5 / standard ZIP, all lengths/CRCs and applicable MACs verified] {result.EntryCount:n0} entries, {result.ChangedEntries:n0} changed -> {output}");
+        if (result.UpdatedCmsManifests > 0) Log($"    Synced {result.UpdatedCmsManifests:n0} internal CMS manifest(s) ({result.UpdatedCmsEntries:n0} Size/Checksum updates).");
         if (result.ChangedEntries == 0) Log("    Unchanged workspace: byte-for-byte original ZIP. Untouched payloads and original entry methods/metadata are preserved after edits.");
         Log("    Original files and previous exports were not overwritten. No game files were installed; external zipmanifest.xml deployment metadata is not updated automatically.");
         Done(output, "ZIP rebuilt and verified OK.");
+    }
+
+    private async void GenerateCmsManifest_Click(object sender, RoutedEventArgs e)
+    {
+        if (_cryptoBusy) return;
+        string? folder = null;
+        if (!string.IsNullOrEmpty(_pendingInput))
+        {
+            string candidate = Directory.Exists(_pendingInput) ? _pendingInput : Path.GetDirectoryName(_pendingInput) ?? "";
+            if (!string.IsNullOrEmpty(candidate) && File.Exists(Path.Combine(candidate, "on-disk-manifest.xml")))
+                folder = candidate;
+        }
+        if (folder == null)
+        {
+            var dlg = new OpenFolderDialog { Title = "Select an extracted FH5 CMS folder (containing on-disk-manifest.xml)" };
+            if (dlg.ShowDialog() != true) return;
+            folder = dlg.FolderName;
+        }
+        try
+        {
+            SetCryptoBusy(true);
+            if (!File.Exists(Path.Combine(folder, "on-disk-manifest.xml")))
+            {
+                Log($"No on-disk-manifest.xml found in {folder}.");
+                Status("Not an FH5 CMS folder.");
+                return;
+            }
+            Status("Recalculating CMS manifest Size & SHA-256 Checksum values…");
+            var res = await Task.Run(() => Fh5CmsManifest.SyncWorkspace(folder));
+            if (res.UpdatedEntries > 0)
+            {
+                Log($"Generated/synced {res.UpdatedManifests:n0} CMS manifest(s) ({res.UpdatedEntries:n0} Size/Checksum entries) in {folder}.");
+                Status($"Synced {res.UpdatedManifests:n0} CMS manifest(s).");
+            }
+            else
+            {
+                Log($"All CMS manifests in {folder} already match current file sizes and SHA-256 checksums.");
+                Status("CMS manifests already up to date.");
+            }
+        }
+        catch (Exception ex) { Fail(ex, folder); }
+        finally { SetCryptoBusy(false); }
     }
 
     private async Task RepackFh6ZipFlow(string workspace)

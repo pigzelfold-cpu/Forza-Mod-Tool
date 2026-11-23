@@ -146,7 +146,7 @@
      <Button x:Name="AddButton" Grid.Row="3" Content="Add selected cars" Click="Add_Click" IsEnabled="False" Margin="0,8,0,0"/>
     </Grid>
    </Grid>
-   <Border Grid.Row="4" Background="#232326" CornerRadius="6" Padding="10" Margin="0,12,0,0"><TextBlock Text="Back up your entire save and close the game before installing an exported copy. Added non-DLC cars also complete their matching supported Car Collection Journal entries; points, bonuses and wristbands sync automatically. DLC cars remain addable without Journal changes. Missing/unsupported entries are reported and kept unchanged. Reward claims and DLC ownership stay unchanged. Stock parts use the built-in FH6 catalog; FM saves are not supported." Foreground="#9C9CA2" TextWrapping="Wrap"/></Border>
+   <Border Grid.Row="4" Background="#232326" CornerRadius="6" Padding="10" Margin="0,12,0,0"><TextBlock Text="Back up your entire save and close the game before installing an exported copy. Added FH6 non-DLC cars sync their Car Collection Journal; FH4 additions sync Car Collector records; FH3 and FH5 add stock cars directly (FH3 syncs CarsInGarage stats). Missing/unsupported entries are reported and kept unchanged. Reward claims and DLC ownership stay unchanged. Stock parts use the matching built-in or selected GameDB catalog; FM saves are not supported." Foreground="#9C9CA2" TextWrapping="Wrap"/></Border>
   </Grid>
   <StackPanel Grid.Row="1" Margin="0,8,0,0"><TextBlock x:Name="CarFieldHelp" Text="Select one garage car to edit its fields." FontSize="11" TextWrapping="Wrap" Foreground="#9C9CA2"/><TextBlock x:Name="StatusText" Text="Ready." Margin="0,5,0,0" TextWrapping="Wrap" Foreground="#9C9CA2"/></StackPanel>
  </Grid>

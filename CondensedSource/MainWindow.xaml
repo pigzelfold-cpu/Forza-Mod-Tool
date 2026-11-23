@@ -645,14 +645,17 @@
                     <TextBlock x:Name="StagedText" Visibility="Collapsed" HorizontalAlignment="Center"
                                Foreground="{StaticResource Pink}" FontSize="11.5" Margin="0,4,0,0"
                                TextTrimming="CharacterEllipsis" MaxWidth="560"/>
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,5,0,0">
+                    <WrapPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,5,0,0">
                         <Button Content="Decrypt" Style="{StaticResource PinkButton}" MinWidth="104" Padding="14,5"
-                                Margin="0,0,10,0" Click="Decrypt_Click"/>
+                                Margin="0,0,10,4" Click="Decrypt_Click"/>
                         <Button Content="Re-encrypt" Style="{StaticResource PinkFilled}" MinWidth="104" Padding="14,5"
-                                Click="ReEncrypt_Click"/>
+                                Margin="0,0,0,4" Click="ReEncrypt_Click"/>
                         <Button x:Name="ExportCarRelatedButton" Content="Export Car Related DB" Style="{StaticResource PinkButton}"
-                                MinWidth="176" Padding="14,5" Margin="10,0,0,0" Click="ExportCarRelated_Click"/>
-                    </StackPanel>
+                                MinWidth="168" Padding="14,5" Margin="10,0,0,4" Click="ExportCarRelated_Click"/>
+                        <Button x:Name="GenerateCmsManifestButton" Content="Generate CMS Manifest" Style="{StaticResource PinkButton}"
+                                MinWidth="168" Padding="14,5" Margin="10,0,0,4" Click="GenerateCmsManifest_Click"
+                                ToolTip="Recalculate Size and SHA-256 Checksum in on-disk-manifest.xml and snapshot-manifest-*.xml for a staged or chosen CMS folder."/>
+                    </WrapPanel>
                 </StackPanel>
             </Grid>
         </Border>
@@ -703,8 +706,13 @@
 
         <!-- ===== Output option ===== -->
         <Grid Grid.Row="4" Margin="0,14,0,0">
-            <CheckBox x:Name="OpenFolderCheck" HorizontalAlignment="Right" Content="Open folder when done"
-                      FontSize="13.5" VerticalAlignment="Center" IsChecked="True"/>
+            <WrapPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <CheckBox x:Name="SyncCmsManifestCheck" Content="Auto-sync CMS manifests on repack"
+                          FontSize="13.5" VerticalAlignment="Center" IsChecked="True" Margin="0,0,18,0"
+                          ToolTip="Automatically recalculate Size and SHA-256 Checksum in on-disk-manifest.xml and snapshot-manifest-*.xml when repacking an FH5 CMS workspace."/>
+                <CheckBox x:Name="OpenFolderCheck" Content="Open folder when done"
+                          FontSize="13.5" VerticalAlignment="Center" IsChecked="True"/>
+            </WrapPanel>
         </Grid>
 
         <!-- ===== Merge zone ===== -->

@@ -35,21 +35,31 @@ internal sealed class UpgradeStringTable
     {
         this.tableName = tableName;
         raw = bytes;
-        if (raw.Length < 140) throw new InvalidDataException("Truncated Upgrades.str.");
+        bool v3 = raw.Length >= 2 && BinaryPrimitives.ReadUInt16LittleEndian(raw) == 0x300;
+        if (raw.Length < (v3 ? 16 : 140)) throw new InvalidDataException("Truncated Upgrades.str.");
         ushort version = BinaryPrimitives.ReadUInt16LittleEndian(raw);
-        encoding = version switch { 0x800 => new UTF8Encoding(false, true), 0x400 => new UnicodeEncoding(false, false, true),
-            _ => throw new InvalidDataException("Unsupported Upgrades.str version.") };
-        terminator = version == 0x400 ? 2 : 1;
-        int nameEnd = Array.IndexOf(raw, (byte)0, 2, 126);
-        if (nameEnd < 0 || Encoding.ASCII.GetString(raw, 2, nameEnd - 2) != tableName)
-            throw new InvalidDataException("Expected the " + tableName + " string table.");
-        int count = BinaryPrimitives.ReadInt16LittleEndian(raw.AsSpan(130));
+        encoding = version switch
+        {
+            0x800 => new UTF8Encoding(false, true),
+            0x400 or 0x300 => new UnicodeEncoding(false, false, true),
+            _ => throw new InvalidDataException("Unsupported Upgrades.str version.")
+        };
+        terminator = version == 0x800 ? 1 : 2;
+        if (!v3)
+        {
+            int nameEnd = Array.IndexOf(raw, (byte)0, 2, 126);
+            if (nameEnd < 0 || Encoding.ASCII.GetString(raw, 2, nameEnd - 2) != tableName)
+                throw new InvalidDataException("Expected the " + tableName + " string table.");
+        }
+        int countOffset = v3 ? 2 : 130;
+        int sectionTableOffset = v3 ? 4 : 132;
+        int count = BinaryPrimitives.ReadInt16LittleEndian(raw.AsSpan(countOffset));
         if (count is not (1 or 2)) throw new InvalidDataException("Invalid Upgrades.str section count.");
-        headerSize = 132 + count * 4;
+        headerSize = sectionTableOffset + count * 4;
         int end = headerSize;
         for (int section = 0; section < count; section++)
         {
-            int start = Read(132 + section * 4);
+            int start = Read(sectionTableOffset + section * 4);
             if (start != end || start > raw.Length - 12) throw new InvalidDataException("Invalid string-table section offset.");
             int size = Read(start), stringBytes = Read(start + 4), entries = Read(start + 8);
             if (size < 0 || stringBytes < 0 || entries < 0 || entries > (raw.Length - start - 12) / 8)
@@ -117,7 +127,8 @@ internal sealed class UpgradeStringTable
                 if (strings.Length > 16_777_216) throw new InvalidDataException("String table exceeds the size limit.");
             }
             long start = output.Position;
-            output.Position = 132 + section * 4; writer.Write(checked((int)start)); output.Position = start;
+            int sectionTableOffset = Version == 0x300 ? 4 : 132;
+            output.Position = sectionTableOffset + section * 4; writer.Write(checked((int)start)); output.Position = start;
             writer.Write(checked(12 + pairs.Count * 8 + (int)strings.Length - blocks[section].SizeBias));
             writer.Write(checked((int)strings.Length)); writer.Write(pairs.Count);
             foreach (var pair in pairs) { writer.Write(pair.Id); writer.Write(pair.Offset); }
@@ -161,7 +172,8 @@ internal sealed class UpgradeStringTable
                 strings.Write(new byte[terminator]);
             }
             long start = output.Position;
-            output.Position = 132 + section * 4; writer.Write(checked((int)start)); output.Position = start;
+            int sectionTableOffset = Version == 0x300 ? 4 : 132;
+            output.Position = sectionTableOffset + section * 4; writer.Write(checked((int)start)); output.Position = start;
             writer.Write(checked(12 + pairs.Count * 8 + (int)strings.Length - block.SizeBias));
             writer.Write(checked((int)strings.Length)); writer.Write(pairs.Count);
             foreach (var pair in pairs) { writer.Write(pair.Key); writer.Write(pair.Offset); }

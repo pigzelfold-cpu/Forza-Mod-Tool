@@ -69,6 +69,24 @@ public sealed class Bxml
         Dirty = true;
     }
 
+    internal int EnsureString(string value)
+    {
+        int existing = Strings.IndexOf(value);
+        if (existing >= 0) return existing;
+        Strings.Add(value);
+        Dirty = true;
+        return Strings.Count - 1;
+    }
+
+    internal int AddFreshString(string value)
+    {
+        Strings.Add(value);
+        Dirty = true;
+        return Strings.Count - 1;
+    }
+
+    internal void MarkDirty() => Dirty = true;
+
     /// <summary>Read one attribute from a parsed node by its friendly key name.</summary>
     public string? GetAttribute(Node node, string key)
     {

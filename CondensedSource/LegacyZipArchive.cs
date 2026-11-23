@@ -63,6 +63,27 @@ public static class LegacyZipArchive
         catch (InvalidDataException) { return false; }
     }
 
+    internal static Dictionary<string, byte[]> ReadEntries(string source, IReadOnlySet<string> wantedFileNames)
+    {
+        using var file = Open(source);
+        var archive = Parse(file);
+        var result = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
+        long decoded = 0;
+        foreach (var entry in archive.Entries)
+        {
+            if (entry.Directory) continue;
+            string key = Path.GetFileName(entry.Name);
+            if (!wantedFileNames.Contains(key)) continue;
+            if (entry.Size > 20_000_000 || (decoded += entry.Size) > 268_435_456)
+                throw new InvalidDataException("Decoded ZIP entries exceed size limits.");
+            using var output = new MemoryStream(checked((int)entry.Size));
+            Decode(file, entry, output);
+            if (!result.TryAdd(key, output.ToArray()))
+                throw new InvalidDataException("Duplicate ZIP entry name: " + key);
+        }
+        return result;
+    }
+
     public static ExtractResult Extract(string source, string outputDirectory, IProgress<Progress>? progress = null)
     {
         using var file = Open(source);

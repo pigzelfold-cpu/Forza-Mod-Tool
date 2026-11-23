@@ -84,7 +84,7 @@ public partial class ProfileEditorView : UserControl
     {
         var dlg = new OpenFileDialog
         {
-            Title = "Select an FH5/FH6 save or FH2 revision file",
+            Title = "Select an FH3/FH4/FH5/FH6 save or FH2 revision file",
             Filter = "Forza save files|C_ProfileData*;*.ProfileData;commit;ProfileData;PlayerDatabase;*.decrypted|All files|*.*",
         };
         if (dlg.ShowDialog() != true) return;
@@ -99,29 +99,48 @@ public partial class ProfileEditorView : UserControl
         byte[] bytes = Fh5ProfileCrypto.ReadInput(path);
         byte[] stream;
         bool outerCrypto;
-        bool fh5 = forceFh5 || Fh5ProfileCrypto.HasHeaderAuthentication(bytes.Length, bytes);
-        if (fh5)
+        ForzaGame game;
+        if (!forceFh5 && Fh3ProfileHelper.IsEncryptedProfile(bytes))
+        {
+            stream = Fh3ProfileHelper.Decrypt(bytes);
+            outerCrypto = true;
+            game = ForzaGame.Horizon3;
+        }
+        else if (!forceFh5 && Fh4ProfileHelper.IsEncryptedProfile(bytes))
+        {
+            stream = Fh4ProfileHelper.Decrypt(bytes);
+            outerCrypto = true;
+            game = ForzaGame.Horizon4;
+        }
+        else if (forceFh5 || Fh5ProfileCrypto.HasHeaderAuthentication(bytes.Length, bytes))
         {
             stream = Fh5ProfileCrypto.Decrypt(bytes);
             outerCrypto = true;
+            game = ForzaGame.Horizon5;
         }
         else if (bytes.Length >= 4 && bytes.AsSpan(0, 4).SequenceEqual(ProfileMarkerLE))
         {
             stream = bytes;                    // already-decrypted, uncompressed section stream
             outerCrypto = false;
+            game = ForzaGame.Horizon6;
         }
         else
         {
             stream = ProfileData.Decrypt(bytes); // encrypted C_ProfileData -> inflated section stream
             outerCrypto = true;
+            game = ForzaGame.Horizon6;
         }
 
         var container = ProfileContainer.Parse(stream);
-        if (!outerCrypto && Fh5ProfileCrypto.IsProfileDatabase(container.Database))
-            fh5 = true;
+        if (!outerCrypto)
+        {
+            if (Fh3ProfileHelper.IsDecryptedFh3Profile(container)) game = ForzaGame.Horizon3;
+            else if (Fh4ProfileHelper.IsDecryptedFh4Profile(container)) game = ForzaGame.Horizon4;
+            else if (Fh5ProfileCrypto.IsProfileDatabase(container.Database)) game = ForzaGame.Horizon5;
+        }
 
         CloseConnection();
-        _isFh5 = fh5;
+        _game = game;
         _outerCryptoApplied = outerCrypto;
         _fh5TableOffset = 0;
         _currentTable = null;
@@ -142,7 +161,17 @@ public partial class ProfileEditorView : UserControl
         _loadedPath = Path.GetFullPath(path);
         _loadedName = Path.GetFileName(path);
 #if PROFILE_UNLOCK_TESTING
-        if (_isFh5)
+        if (_isFh3)
+        {
+            var fh3GameData = Fh3ProfileGameData.AttachAutomatically(container);
+            Log(fh3GameData.Message, fh3GameData.Loaded ? "ok" : "info");
+        }
+        else if (_isFh4)
+        {
+            var fh4GameData = Fh4ProfileGameData.AttachAutomatically(container);
+            Log(fh4GameData.Message, fh4GameData.Loaded ? "ok" : "info");
+        }
+        else if (_isFh5)
         {
             var fh5GameData = Fh5ProfileGameData.AttachAutomatically(container);
             Log(fh5GameData.Message, fh5GameData.Loaded ? "ok" : "info");
@@ -158,9 +187,15 @@ public partial class ProfileEditorView : UserControl
 #endif
 
         LoadTableList();
+        string modeLabel = _game switch
+        {
+            ForzaGame.Horizon3 => _outerCryptoApplied ? "FH3 encrypted save (re-encrypted automatically when you Save)" : "FH3 decrypted stream",
+            ForzaGame.Horizon4 => _outerCryptoApplied ? "FH4 encrypted save (re-encrypted automatically when you Save)" : "FH4 decrypted stream",
+            ForzaGame.Horizon5 => _outerCryptoApplied ? "FH5 encrypted save (re-encrypted automatically when you Save)" : "FH5 decrypted stream",
+            _ => _outerCryptoApplied ? "FH6 encrypted save (re-encrypted automatically when you Save)" : "already-decrypted stream",
+        };
         SummaryText.Text =
-            $"{_loadedName}   ·   {_tables.Count} data tables   ·   database {container.Database.Length:n0} bytes   ·   integrity {integrity}   ·   " +
-            (_isFh5 ? (_outerCryptoApplied ? "FH5 encrypted save (re-encrypted automatically when you Save)" : "FH5 decrypted stream") : _outerCryptoApplied ? "FH6 encrypted save (re-encrypted automatically when you Save)" : "already-decrypted stream");
+            $"{_loadedName}   ·   {_tables.Count} data tables   ·   database {container.Database.Length:n0} bytes   ·   integrity {integrity}   ·   {modeLabel}";
         StatusLine.Text = $"{_loadedName} loaded — {_tables.Count} tables";
         SaveBtn.IsEnabled = true;
         Log($"loaded {_loadedName}: {_tables.Count} tables, database {container.Database.Length:n0} bytes, integrity {integrity}", "ok");
@@ -233,7 +268,7 @@ public partial class ProfileEditorView : UserControl
         var dt = new DataTable();
         using (var cmd = _conn.CreateCommand())
         {
-            cmd.CommandText = $"SELECT rowid AS __rowid__, * FROM {Quote(table)} ORDER BY rowid LIMIT {RowLimit} OFFSET {(_isFh5 ? _fh5TableOffset : 0)}";
+            cmd.CommandText = $"SELECT rowid AS __rowid__, * FROM {Quote(table)} ORDER BY rowid LIMIT {RowLimit} OFFSET {(_usesTablePaging ? _fh5TableOffset : 0)}";
             using var r = cmd.ExecuteReader();
             for (int i = 0; i < r.FieldCount; i++) dt.Columns.Add(r.GetName(i), typeof(string));
             while (r.Read())
@@ -247,9 +282,9 @@ public partial class ProfileEditorView : UserControl
         RowGrid.ItemsSource = dt.DefaultView;
         GridTitle.Text = $"{table.ToUpperInvariant()}   ·   showing {dt.Rows.Count} of {total:n0}";
         _fh5TableRows = total;
-        if (_isFh5) GridTitle.Text = $"{table} · {(_fh5TableOffset + (dt.Rows.Count > 0 ? 1 : 0)):n0}–{_fh5TableOffset + dt.Rows.Count:n0} / {total:n0}";
-        Fh5PreviousRows.IsEnabled = _isFh5 && _fh5TableOffset > 0;
-        Fh5NextRows.IsEnabled = _isFh5 && _fh5TableOffset + dt.Rows.Count < total;
+        if (_usesTablePaging) GridTitle.Text = $"{table} · {(_fh5TableOffset + (dt.Rows.Count > 0 ? 1 : 0)):n0}–{_fh5TableOffset + dt.Rows.Count:n0} / {total:n0}";
+        Fh5PreviousRows.IsEnabled = _usesTablePaging && _fh5TableOffset > 0;
+        Fh5NextRows.IsEnabled = _usesTablePaging && _fh5TableOffset + dt.Rows.Count < total;
     }
 
     void RowGrid_AutoGenColumn(object sender, DataGridAutoGeneratingColumnEventArgs e)
@@ -743,6 +778,8 @@ public partial class ProfileEditorView : UserControl
     // ============================================================ overview (friendly landing)
     void BuildOverview()
     {
+        if (_isFh3) { BuildFh3Overview(); return; }
+        if (_isFh4) { BuildFh4Overview(); return; }
         if (_isFh5) { BuildFh5Overview(); return; }
 #if PROFILE_UNLOCK_TESTING
         using var catalogScope = ProfileGameData.Use(_container);
@@ -1103,15 +1140,17 @@ public partial class ProfileEditorView : UserControl
     void Save_Click(object sender, RoutedEventArgs e)
     {
         if (_container == null || _conn == null) { Log("load a profile first", "err"); return; }
-        string defaultName = _isFh5
+        string defaultName = _isFh3 || _isFh4 || _isFh5
             ? (string.IsNullOrEmpty(_loadedName) ? "User_ProfileData.edited" : $"{_loadedName}.edited")
             : "C_ProfileData.edited";
         var dlg = new SaveFileDialog
         {
-            Title = _isFh5 ? "Save the edited FH5 ProfileData" : "Save the edited ProfileData",
+            Title = _isFh3 ? "Save the edited FH3 ProfileData" : _isFh4 ? "Save the edited FH4 ProfileData" : _isFh5 ? "Save the edited FH5 ProfileData" : "Save the edited ProfileData",
             FileName = defaultName,
             Filter = "ProfileData|*.*",
         };
+        if (SaveLocator.IsLiveWgsContainerPath(_loadedPath))
+            dlg.InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
         if (dlg.ShowDialog() != true) return;
         try { SaveProfile(dlg.FileName); }
         catch (Exception ex) { Fail("save", ex); }
@@ -1119,7 +1158,7 @@ public partial class ProfileEditorView : UserControl
 
     void SaveProfile(string destination)
     {
-        if (_isFh5 && SaveLocator.IsLiveWgsContainerPath(destination))
+        if ((_isFh3 || _isFh4 || _isFh5) && SaveLocator.IsLiveWgsContainerPath(destination))
             throw new InvalidOperationException("Cannot export directly into a live Windows Store (WGS) save directory. Save to a separate folder first.");
         if (string.Equals(Path.GetFullPath(destination), _loadedPath, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Export to a separate file to keep your original save unchanged as a backup.");
@@ -1145,7 +1184,21 @@ public partial class ProfileEditorView : UserControl
         byte[] output;
         if (_outerCryptoApplied)
         {
-            if (_isFh5)
+            if (_isFh3)
+            {
+                output = Fh3ProfileHelper.Encrypt(stream, _originalBytes);
+                byte[] check = Fh3ProfileHelper.Decrypt(output);
+                if (!check.AsSpan().SequenceEqual(stream))
+                    throw new InvalidDataException("re-encrypted FH3 profile failed round-trip verification; nothing was written.");
+            }
+            else if (_isFh4)
+            {
+                output = Fh4ProfileHelper.Encrypt(stream, _originalBytes);
+                byte[] check = Fh4ProfileHelper.Decrypt(output);
+                if (!check.AsSpan().SequenceEqual(stream))
+                    throw new InvalidDataException("re-encrypted FH4 profile failed round-trip verification; nothing was written.");
+            }
+            else if (_isFh5)
             {
                 output = Fh5ProfileCrypto.Encrypt(stream, _originalBytes);
                 // verify the round trip decrypts back to exactly what we packed
@@ -1170,7 +1223,10 @@ public partial class ProfileEditorView : UserControl
         File.WriteAllBytes(destination, output);
         OpenConnection();   // reopen so editing can continue
 
-        Log($"saved {Path.GetFileName(destination)}  ·  {output.Length:n0} bytes  ·  {(_outerCryptoApplied ? (_isFh5 ? "FH5 re-encrypted + verified" : "re-encrypted + verified") : "decrypted stream")}", "ok");
+        string cryptoNote = _outerCryptoApplied
+            ? (_isFh3 ? "FH3 re-encrypted + verified" : _isFh4 ? "FH4 re-encrypted + verified" : _isFh5 ? "FH5 re-encrypted + verified" : "re-encrypted + verified")
+            : "decrypted stream";
+        Log($"saved {Path.GetFileName(destination)}  ·  {output.Length:n0} bytes  ·  {cryptoNote}", "ok");
         StatusLine.Text = $"saved {Path.GetFileName(destination)}";
     }
 
@@ -1197,6 +1253,6 @@ public partial class ProfileEditorView : UserControl
     void Fail(string action, Exception ex)
     {
         Log($"{action} failed: {ex.Message}", "err");
-        ProfileMessageWindow.Show(this, _isFh5 ? "FH5 Profile Editor" : "FH6 Profile Editor", ex.Message, confirmation: false);
+        ProfileMessageWindow.Show(this, _isFh3 ? "FH3 Profile Editor" : _isFh4 ? "FH4 Profile Editor" : _isFh5 ? "FH5 Profile Editor" : "FH6 Profile Editor", ex.Message, confirmation: false);
     }
 }
